@@ -183,7 +183,6 @@ module internal Parser
 (* These five types will move out of this file once you start working on the project *)
     type word   = (char * int) list
     type square = Map<int, squareFun>
-
     let parseSquareProg (sqp:squareProg) = Map.map (fun _ value -> (run stmntParse value) |> getSuccess |> stmntToSquareFun) sqp
 
     type boardFun2 = coord -> StateMonad.Result<square option, StateMonad.Error>
