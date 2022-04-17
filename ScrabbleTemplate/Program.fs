@@ -52,11 +52,11 @@ let main argv =
          Some (Dictionary.empty, Dictionary.insert, Dictionary.step, None (*Some Dictionary.reverse*)) 
 
     // Uncomment this line to call your client
-    let players    = [("mads", madsSW2.Scrabble.startGame)]
+    //let players    = [("mads", madsSW2.Scrabble.startGame)]
     let (dictionary, time) =
         time (fun () -> ScrabbleUtil.Dictionary.mkDict words dictAPI)
 
-    //let players = spawnMultiples "OxyphenButazone" dictionary Oxyphenbutazone.Scrabble.startGame 4
+    let players = spawnMultiples "OxyphenButazone" dictionary Oxyphenbutazone.Scrabble.startGame 4
 
 
     do ScrabbleServer.Comm.startGame 

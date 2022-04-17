@@ -12,6 +12,7 @@ module internal Parser
     open FParsecLight.TextParser     // Industrial parser-combinator library. Use for Scrabble Project.
     
     
+    type squareFun = word -> int -> int -> Result<int, Error>
     let pIntToChar  = pstring "intToChar"
     let pPointValue = pstring "pointValue"
 
@@ -180,18 +181,6 @@ module internal Parser
     let stmntParse = stmntTopParse
 
 (* These five types will move out of this file once you start working on the project *)
-    type coord      = int * int
-    type squareProg = Map<int, string>
-    type boardProg  = {
-            prog       : string;
-            squares    : Map<int, squareProg>
-            usedSquare : int
-            center     : coord
-    
-            isInfinite : bool   // For pretty-printing purposes only
-            ppSquare   : string // For pretty-printing purposes only
-        }
-
     type word   = (char * int) list
     type square = Map<int, squareFun>
 
