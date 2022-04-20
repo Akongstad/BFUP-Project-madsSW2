@@ -2,9 +2,9 @@
 
 open System
 let time f =
-    let start = System.DateTime.Now
+    let start = DateTime.Now
     let res = f ()
-    let finish = System.DateTime.Now
+    let finish = DateTime.Now
     (res, finish - start)
 
 let readLines filePath = System.IO.File.ReadLines(filePath)
@@ -21,9 +21,9 @@ let spawnMultiples name dict bot =
 let main argv =
     ScrabbleUtil.DebugPrint.toggleDebugPrint false // Change to false to supress debug output
 
-    System.Console.BackgroundColor <- System.ConsoleColor.White
-    System.Console.ForegroundColor <- System.ConsoleColor.Black
-    System.Console.Clear()
+    Console.BackgroundColor <- ConsoleColor.White
+    Console.ForegroundColor <- ConsoleColor.Black
+    Console.Clear()
 
 
     let board        = ScrabbleUtil.StandardBoard.standardBoard ()
@@ -47,15 +47,16 @@ let main argv =
 
     let dictAPI =
         // Uncomment if you have implemented a dictionary. last element None if you have not implemented a GADDAG
-        Some (Dictionary.empty, Dictionary.insert, Dictionary.step, None (*Some Dictionary.reverse*)) 
+        Some (Dictionary.empty, Dictionary.insert, Dictionary.step, None (*Some Dictionary.reverse*))
         
 
     // Uncomment this line to call your client
-    //let players    = [("mads", madsSW2.Scrabble.startGame)]
+    
     let (dictionary, time) =
         time (fun () -> ScrabbleUtil.Dictionary.mkDict words dictAPI)
-
-    let players = spawnMultiples "OxyphenButazone" dictionary Oxyphenbutazone.Scrabble.startGame 4
+        
+    let players    =  spawnMultiples "mads" dictionary madsSW2.Scrabble.startGame 1    // [("mads", madsSW2.Scrabble.startGame)]
+    //let players = spawnMultiples "OxyphenButazone" dictionary Oxyphenbutazone.Scrabble.startGame 4
 
 
     do ScrabbleServer.Comm.startGame 

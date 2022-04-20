@@ -34,10 +34,10 @@ module internal Parser
     let pdo       = pstring "do"
     let pdeclare  = pstring "declare"
 
-    let whitespaceChar = satisfy System.Char.IsWhiteSpace <?> "whitespace"
-    let pletter        = satisfy System.Char.IsLetter <?> "letter"
-    let palphanumeric  = satisfy System.Char.IsLetterOrDigit <|> (pchar '_')  <?> "alphanumeric"
-    let pAnyChar = palphanumeric <|> satisfy System.Char.IsWhiteSpace <|> satisfy System.Char.IsSymbol
+    let whitespaceChar = satisfy Char.IsWhiteSpace <?> "whitespace"
+    let pletter        = satisfy Char.IsLetter <?> "letter"
+    let palphanumeric  = satisfy Char.IsLetterOrDigit <|> (pchar '_')  <?> "alphanumeric"
+    let pAnyChar = palphanumeric <|> satisfy Char.IsWhiteSpace <|> satisfy Char.IsSymbol
 
     let spaces         = many whitespaceChar <?> "space"
     let spaces1        = many1 whitespaceChar <?> "space1"
@@ -49,7 +49,7 @@ module internal Parser
     let parenthesise p = pchar '(' >*>. p .>*> pchar ')' <?> "parenthesis"
     let curlyParenthesise p = pchar '{' >*>. p .>*> pchar '}'
 
-    let charListToStr charList = System.String(List.toArray charList) |> string
+    let charListToStr charList = String(List.toArray charList) |> string
     let pid = pletter <|> (pchar '_') .>*>. many palphanumeric |>> (fun (x, lst) -> charListToStr(char x::lst)) <?> "pid"
     
     let unop op a = op >*>. a <?> "unop"
