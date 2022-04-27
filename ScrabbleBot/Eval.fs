@@ -101,7 +101,7 @@ let (.||.) b1 b2 =
     ~~(~~b1 .&&. ~~b2) (* boolean disjunction *)
 
 let (.->.) b1 b2 =
-    (~~b1) .||. b2 (* boolean implication *)
+    ~~b1 .||. b2 (* boolean implication *)
 
 let (.=.) a b = AEq(a, b)
 let (.<.) a b = ALt(a, b)
@@ -237,10 +237,10 @@ and charEval2 c =
             return! characterValue f
         | ToUpper x ->
             let! f = charEval2 x
-            return (System.Char.ToUpper(f))
+            return System.Char.ToUpper(f)
         | ToLower x ->
             let! f = charEval2 x
-            return (System.Char.ToLower(f))
+            return System.Char.ToLower(f)
         | IntToChar x ->
             let! f = arithEval x
             return (char f)
@@ -268,10 +268,10 @@ let rec boolEval2 b =
             return (x1 && x2)
         | IsDigit x ->
             let! f = charEval2 x
-            return (System.Char.IsDigit(f))
+            return System.Char.IsDigit(f)
         | IsLetter x ->
             let! f = charEval2 x
-            return (System.Char.IsLetter(f))
+            return System.Char.IsLetter(f)
         | IsVowel x ->
             let! f = charEval2 x
             return (isVowel f)
