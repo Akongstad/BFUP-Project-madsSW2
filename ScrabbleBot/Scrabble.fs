@@ -18,9 +18,11 @@ module RegEx =
         else None
 
     let parseMove ts =
+        printf("parsing move\n")
         let pattern = @"([-]?[0-9]+[ ])([-]?[0-9]+[ ])([0-9]+)([A-Z]{1})([0-9]+)[ ]?" 
         Regex.Matches(ts, pattern) |>
-        Seq.cast<Match> |> 
+        Seq.cast<Match> |>
+           
         Seq.map 
             (fun t -> 
                 match t.Value with
@@ -43,9 +45,12 @@ module State =
 
     type state = {
         board         : Parser.board
-        dict          : ScrabbleUtil.Dictionary.Dict
+        dict          : Dictionary.Dict
         playerNumber  : uint32
         hand          : MultiSet.MultiSet<uint32>
+        //number of players (så vi bl.a ved at hvis en forfeiter, og de kun er 2, så har den anden vundet.
+        //player turn
+        //hvordan holdes der styr på point? - det gør serveren.
     }
 
     let mkState b d pn h = {board = b; dict = d;  playerNumber = pn; hand = h }
@@ -66,7 +71,10 @@ module Scrabble =
             // remove the force print when you move on from manual input (or when you have learnt the format)
             forcePrint "Input move (format '(<x-coordinate> <y-coordinate> <piece id><character><point-value> )*', note the absence of space between the last inputs)\n\n"
             let input =  System.Console.ReadLine()
-            let move = RegEx.parseMove input
+
+            
+            let move = RegEx.parseMove input (*vi skal have lavet en funktion lige her, som efter en eller anden heuristik kan finde det næste move*)
+
             
             debugPrint (sprintf "Player %d -> Server:\n%A\n" (State.playerNumber st) move) // keep the debug lines. They are useful.
             send cstream (SMPlay move)
@@ -77,14 +85,17 @@ module Scrabble =
             match msg with
             | RCM (CMPlaySuccess(ms, points, newPieces)) ->
                 (* Successful play by you. Update your state (remove old tiles, add the new ones, change turn, etc) *)
+                printf("succesful play by you!")
                 let st' = st // This state needs to be updated
                 aux st'
             | RCM (CMPlayed (pid, ms, points)) ->
                 (* Successful play by other player. Update your state *)
+                printf("succesful play by other!")
                 let st' = st // This state needs to be updated
                 aux st'
             | RCM (CMPlayFailed (pid, ms)) ->
                 (* Failed play. Update your state *)
+                printf("failed play by you!")
                 let st' = st // This state needs to be updated
                 aux st'
             | RCM (CMGameOver _) -> ()
@@ -120,3 +131,24 @@ module Scrabble =
 
         fun () -> playGame cstream tiles (State.mkState board dict playerNumber handSet)
         
+        // '(<x-coordinate> <y-coordinate> <piece id><character><point-value> )
+        (*HEURISTIC*)
+        //let bestMove (st : State.state)
+           (* let board = st.board
+            let squares = board.squares
+            let hand = st.hand
+            let dict = st.dict
+            
+            let rec aux (c:Coord) (x:int) (y:int) =
+                
+                
+                
+                
+            
+           
+            
+            
+           aux(board.center)  *)          
+            
+            
+            //((x |> int, y |> int), (id |> uint32, (c |> char, p |> int)))

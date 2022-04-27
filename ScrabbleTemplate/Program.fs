@@ -48,6 +48,7 @@ let main argv =
         // Uncomment if you have implemented a dictionary. last element None if you have not implemented a GADDAG
         Some (Dictionary.empty, Dictionary.insert, Dictionary.step, None (*Some Dictionary.reverse*))
         
+
     
     // Uncomment this  ine to call your client
     
@@ -60,6 +61,7 @@ let main argv =
     //Test dictionary implementation. isEmpty == true means passed
     let test = ScrabbleUtil.Dictionary.test words 10 (dictionary false)
     printf $"Testing dictionary... result: {test.IsEmpty} \n"
+
     do ScrabbleServer.Comm.startGame 
           board dictionary handSize timeout tiles seed port players
     
