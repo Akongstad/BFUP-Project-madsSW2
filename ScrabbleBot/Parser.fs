@@ -7,8 +7,8 @@ module internal Parser
 
     open StateMonad
     open ScrabbleUtil // NEW. KEEP THIS LINE.
-    open System
     open Eval
+    open System
     open FParsecLight.TextParser     // Industrial parser-combinator library. Use for Scrabble Project.
     
     

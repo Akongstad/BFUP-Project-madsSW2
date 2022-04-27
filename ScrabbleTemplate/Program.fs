@@ -1,5 +1,4 @@
 ﻿// Learn more about F# at http://fsharp.org
-
 open System
 let time f =
     let start = DateTime.Now
@@ -50,22 +49,23 @@ let main argv =
         Some (Dictionary.empty, Dictionary.insert, Dictionary.step, None (*Some Dictionary.reverse*))
         
 
-    // Uncomment this line to call your client
     
+    // Uncomment this  ine to call your client
     
-    let (dictionary, time) =
+    let dictionary, time =
         time (fun () -> ScrabbleUtil.Dictionary.mkDict words dictAPI)
-    
-    let players = [("mads", dictionary, madsSW2.Scrabble.startGame)]
-    
-    //let players    =  spawnMultiples "mads" dictionary madsSW2.Scrabble.startGame 2    // [("mads", madsSW2.Scrabble.startGame)]
+        
+    let players    =  spawnMultiples "mads" dictionary madsSW2.Scrabble.startGame 1    // [("mads", madsSW2.Scrabble.startGame)]
     //let players = spawnMultiples "OxyphenButazone" dictionary Oxyphenbutazone.Scrabble.startGame 4
 
+    //Test dictionary implementation. isEmpty == true means passed
+    let test = ScrabbleUtil.Dictionary.test words 10 (dictionary false)
+    printf $"Testing dictionary... result: {test.IsEmpty} \n"
 
     do ScrabbleServer.Comm.startGame 
           board dictionary handSize timeout tiles seed port players
     
-    ScrabbleUtil.DebugPrint.forcePrint ("Server has terminated. Press Enter to exit program.\n")
-    System.Console.ReadLine () |> ignore
+    ScrabbleUtil.DebugPrint.forcePrint "Server has terminated. Press Enter to exit program.\n"
+    Console.ReadLine () |> ignore
 
     0
