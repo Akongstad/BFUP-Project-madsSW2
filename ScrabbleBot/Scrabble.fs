@@ -45,64 +45,125 @@ module State =
 
     type state = {
         board         : Parser.board
+
         dict          : Dictionary.Dict
+        numberofPlayers : uint32
+
+        ForfeitedPlayers : List<uint32>
+
         playerNumber  : uint32
+        playerTurn    : uint32
         hand          : MultiSet.MultiSet<uint32>
+        boardTiles    : Map<coord,(char*int)>
         //number of players (så vi bl.a ved at hvis en forfeiter, og de kun er 2, så har den anden vundet.
         //player turn
         //hvordan holdes der styr på point? - det gør serveren.
     }
 
-    let mkState b d pn h = {board = b; dict = d;  playerNumber = pn; hand = h }
+    let mkState b d np pn pt h g bT = {board = b; dict = d; numberofPlayers = np; playerNumber = pn; ForfeitedPlayers =g; playerTurn = pt; hand = h; boardTiles = bT}
 
     let board st         = st.board
     let dict st          = st.dict
     let playerNumber st  = st.playerNumber
     let hand st          = st.hand
+    let playerTurn st = st.playerTurn
+    
+    let numberOfPlayers st = st.numberofPlayers
+    let ForfeitedPlayers st = st.ForfeitedPlayers
+    
+    let boardtiles st = st.boardTiles
+    
+    // move: ((int * int) * (uint32 * (char * int))) list
+    //helper methods
+     
+    let getCoordAndTileFromMove moveList boardTiles = List.fold (fun acc (x,k) -> Map.add (coord(x)) (snd(k)) acc) boardTiles moveList //get list of coord and (char * char point val)
+    let getUsedTileIdFromMove moveList = List.fold (fun acc (x,k) -> fst(k)::acc) List.Empty moveList //get the tile ids of the played move
+    
+    let removeFromHandSet playedPieces hand = List.fold (fun acc x -> MultiSet.remove x 1u acc) hand playedPieces //removes the played tiles from the hand
+    
+    let addToHandSet newTiles hand = List.fold (fun acc (x, k) -> MultiSet.add x k acc) hand newTiles //adds new tiles to the hand
+    
+    let changePlayerTurn (st:state) =
+                let rec player pnr =
+                    if st.numberofPlayers = pnr then
+                        if List.contains 1u st.ForfeitedPlayers then
+                            player 1u
+                        else 1u
+                    else if (List.contains (pnr+1u ) st.ForfeitedPlayers) then
+
+                            player st.playerTurn +  1u
+                         else st.playerTurn +  1u
+                player st.playerNumber
+    let updatedForfeitedPlayers (st : state) playerId = playerId::st.ForfeitedPlayers
 
 module Scrabble =
     open System.Threading
+    
 
     let playGame cstream pieces (st : State.state) =
 
         let rec aux (st : State.state) =
             Print.printHand pieces (State.hand st)
+            
 
             // remove the force print when you move on from manual input (or when you have learnt the format)
             forcePrint "Input move (format '(<x-coordinate> <y-coordinate> <piece id><character><point-value> )*', note the absence of space between the last inputs)\n\n"
             let input =  System.Console.ReadLine()
-
-            
             let move = RegEx.parseMove input (*vi skal have lavet en funktion lige her, som efter en eller anden heuristik kan finde det næste move*)
-
-            
+                            
+       
             debugPrint (sprintf "Player %d -> Server:\n%A\n" (State.playerNumber st) move) // keep the debug lines. They are useful.
             send cstream (SMPlay move)
 
             let msg = recv cstream
             debugPrint (sprintf "Player %d <- Server:\n%A\n" (State.playerNumber st) move) // keep the debug lines. They are useful.
-
+            
+            
             match msg with
             | RCM (CMPlaySuccess(ms, points, newPieces)) ->
                 (* Successful play by you. Update your state (remove old tiles, add the new ones, change turn, etc) *)
+
                 printf("succesful play by you!")
-                let st' = st // This state needs to be updated
+             
+                let usedTileIds = State.getUsedTileIdFromMove move
+                let currentHand = State.removeFromHandSet usedTileIds st.hand  
+                let nextHand = State.addToHandSet newPieces currentHand
+                
+                let newBoardTiles = State.getCoordAndTileFromMove ms st.boardTiles
+                
+                let st' = State.mkState st.board st.dict st.numberofPlayers st.playerNumber (State.changePlayerTurn st) nextHand st.ForfeitedPlayers newBoardTiles
                 aux st'
+                
             | RCM (CMPlayed (pid, ms, points)) ->
                 (* Successful play by other player. Update your state *)
                 printf("succesful play by other!")
-                let st' = st // This state needs to be updated
+                
+                let newBoardTiles = State.getCoordAndTileFromMove ms st.boardTiles
+                
+                let st' = State.mkState st.board st.dict st.numberofPlayers st.playerNumber (State.changePlayerTurn st) st.hand st.ForfeitedPlayers newBoardTiles
                 aux st'
+                
             | RCM (CMPlayFailed (pid, ms)) ->
                 (* Failed play. Update your state *)
                 printf("failed play by you!")
-                let st' = st // This state needs to be updated
+                
+                let st' = State.mkState st.board st.dict st.numberofPlayers st.playerNumber (State.changePlayerTurn st) st.hand st.ForfeitedPlayers st.boardTiles  // This state needs to be updated
                 aux st'
+                
+            | RCM (CMForfeit playerId) ->
+                printf("Player {pid} forfeited")
+
+                let st' = State.mkState st.board st.dict st.numberofPlayers  st.playerNumber  (State.changePlayerTurn st) st.hand (State.updatedForfeitedPlayers st playerId) st.boardTiles
+                aux st'
+                
             | RCM (CMGameOver _) -> ()
             | RCM a -> failwith (sprintf "not implmented: %A" a)
-            | RGPE err -> printfn "Gameplay Error:\n%A" err; aux st
-
-
+            | RGPE err ->
+                printfn "Gameplay Error:\n%A" err
+                
+                let st' = State.mkState st.board st.dict st.numberofPlayers st.playerNumber (State.changePlayerTurn st) st.hand st.ForfeitedPlayers st.boardTiles
+                aux st'
+           
         aux st
 
     let startGame 
@@ -122,14 +183,23 @@ module Scrabble =
                       player turn = %d
                       hand =  %A
                       timeout = %A\n\n" numPlayers playerNumber playerTurn hand timeout)
-
+            
+           
         //let dict = dictf true // Uncomment if using a gaddag for your dictionary
         let dict = dictf false // Uncomment if using a trie for your dictionary
         let board = Parser.mkBoard boardP
+
+        let forfeitedPlayers = List.Empty
                   
         let handSet = List.fold (fun acc (x, k) -> MultiSet.add x k acc) MultiSet.empty hand
+        
+        let boardTiles = Map.empty
+        
+        
+        
+        fun () -> playGame cstream tiles (State.mkState board dict numPlayers playerNumber playerTurn  handSet forfeitedPlayers boardTiles)
 
-        fun () -> playGame cstream tiles (State.mkState board dict playerNumber handSet)
+        
         
         // '(<x-coordinate> <y-coordinate> <piece id><character><point-value> )
         (*HEURISTIC*)
@@ -152,3 +222,4 @@ module Scrabble =
             
             
             //((x |> int, y |> int), (id |> uint32, (c |> char, p |> int)))
+
