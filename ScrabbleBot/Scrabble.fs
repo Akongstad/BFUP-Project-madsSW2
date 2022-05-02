@@ -151,27 +151,27 @@ module Scrabble =
                 (* Failed play. Update your state *)
                 printf("failed play by you!")
                 
-                let st' = State.mkState st.board st.dict st.numberofPlayers st.playerNumber (State.changePlayerTurn st) st.hand st.ForfeitedPlayers st.boardTiles  // This state needs to be updated
+                let st' = State.mkState st.board st.dict st.numberofPlayers st.playerNumber (State.changePlayerTurn st) st.hand st.ForfeitedPlayers st.boardTiles 
                 aux st'
                 
             | RCM (CMForfeit playerId) ->
                 printf("Player {pid} forfeited")
                 let updatedForfeitedPlayers (st : State.state) = List.insertAt 1 playerId st.ForfeitedPlayers
-                let state = State.mkState st.board st.dict st.numberofPlayers  st.playerNumber  (changePlayerTurn st)   st.hand (updatedForfeitedPlayers st)
-                aux state
+                let st' = State.mkState st.board st.dict st.numberofPlayers  st.playerNumber  (State.changePlayerTurn st)   st.hand (updatedForfeitedPlayers st) st.boardTiles
+                aux st'
             | RCM(CMChangeSuccess(newPieces)) ->
                 printf("You changed pieces")
                 let newHand = List.fold (fun acc (x, k) -> MultiSet.add x k acc) MultiSet.empty newPieces
-                let st' = State.mkState st.board st.dict st.numberofPlayers  st.playerNumber  (changePlayerTurn st) newHand st.ForfeitedPlayers
+                let st' = State.mkState st.board st.dict st.numberofPlayers  st.playerNumber  (State.changePlayerTurn st) newHand st.ForfeitedPlayers st.boardTiles
                 aux st'
             | RCM(CMChange(playerId, numberOfTiles)) ->
                 printf($"Player %d{playerId} changed %d{numberOfTiles} pieces")              
-                let st' = State.mkState st.board st.dict st.numberofPlayers  st.playerNumber  (changePlayerTurn st) st.hand st.ForfeitedPlayers
+                let st' = State.mkState st.board st.dict st.numberofPlayers  st.playerNumber  (State.changePlayerTurn st) st.hand st.ForfeitedPlayers st.boardTiles
                 aux st'
             | RCM (CMGameOver _) -> ()
             | RCM a -> failwith (sprintf "not implmented: %A" a)
-            | RGPE err -> printfn "Gameplay Error:\n%A" err;
-                
+            | RGPE err ->
+                printfn "Gameplay Error:\n%A" err
                 let st' = State.mkState st.board st.dict st.numberofPlayers st.playerNumber (State.changePlayerTurn st) st.hand st.ForfeitedPlayers st.boardTiles
                 aux st'
            
