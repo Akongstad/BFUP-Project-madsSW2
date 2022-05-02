@@ -109,9 +109,11 @@ module Scrabble =
             match msg with
             | RCM (CMPlaySuccess(ms, points, newPieces)) ->
                 (* Successful play by you. Update your state (remove old tiles, add the new ones, change turn, etc) *)
-
                 printf("succesful play by you!")
-
+                (*forcePrint $"Variables:!
+                      ms = %A{ms}
+                      points = %d{points}
+                      newPieces = %A{newPieces}\n\n"*)
                 let state = State.mkState st.board st.dict st.numberofPlayers st.playerNumber   (changePlayerTurn st)  st.hand st.ForfeitedPlayers
 
                 aux state 
@@ -130,15 +132,21 @@ module Scrabble =
                 //aux state 
             | RCM (CMForfeit playerId) ->
                 printf("Player {pid} forfeited")
-
                 let updatedForfeitedPlayers (st : State.state) = List.insertAt 1 playerId st.ForfeitedPlayers
                 let state = State.mkState st.board st.dict st.numberofPlayers  st.playerNumber  (changePlayerTurn st)   st.hand (updatedForfeitedPlayers st)
-
                 aux state
+            | RCM(CMChangeSuccess(newPieces)) ->
+                printf("You changed pieces")
+                let newHand = List.fold (fun acc (x, k) -> MultiSet.add x k acc) MultiSet.empty newPieces
+                let st' = State.mkState st.board st.dict st.numberofPlayers  st.playerNumber  (changePlayerTurn st) newHand st.ForfeitedPlayers
+                aux st'
+            | RCM(CMChange(playerId, numberOfTiles)) ->
+                printf($"Player %d{playerId} changed %d{numberOfTiles} pieces")              
+                let st' = State.mkState st.board st.dict st.numberofPlayers  st.playerNumber  (changePlayerTurn st) st.hand st.ForfeitedPlayers
+                aux st'
             | RCM (CMGameOver _) -> ()
             | RCM a -> failwith (sprintf "not implmented: %A" a)
             | RGPE err -> printfn "Gameplay Error:\n%A" err; aux st
-           
                 
         
 
@@ -154,13 +162,13 @@ module Scrabble =
             (tiles : Map<uint32, tile>)
             (timeout : uint32 option) 
             (cstream : Stream) =
-        debugPrint 
-            (sprintf "Starting game!
-                      number of players = %d
-                      player id = %d
-                      player turn = %d
-                      hand =  %A
-                      timeout = %A\n\n" numPlayers playerNumber playerTurn hand timeout)
+        forcePrint 
+            $"Starting game!
+                      number of players = %d{numPlayers}
+                      player id = %d{playerNumber}
+                      player turn = %d{playerTurn}
+                      hand =  %A{hand}
+                      timeout = %A{timeout}\n\n"
             
            
         //let dict = dictf true // Uncomment if using a gaddag for your dictionary
@@ -173,8 +181,7 @@ module Scrabble =
 
         fun () -> playGame cstream tiles (State.mkState board dict numPlayers playerNumber playerTurn  handSet forfeitedPlayers)
 
-        
-        
+      
         // '(<x-coordinate> <y-coordinate> <piece id><character><point-value> )
         (*HEURISTIC*)
         //let bestMove (st : State.state)
