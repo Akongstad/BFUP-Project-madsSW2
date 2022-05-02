@@ -30,6 +30,19 @@ module RegEx =
                     ((x |> int, y |> int), (id |> uint32, (c |> char, p |> int)))
                 | _ -> failwith "Failed (should never happen)") |>
         Seq.toList
+    let parseChangePieces ts =
+        printf("parsing move\n")
+        let pattern = @"([\d]){1,2}" 
+        Regex.Matches(ts, pattern) |>
+        Seq.cast<Match> |>
+           
+        Seq.map 
+            (fun t -> 
+                match t.Value with
+                | Regex pattern [id;] ->
+                    (id |> uint32)
+                | _ -> failwith "Failed (should never happen)") |>
+        Seq.toList
 
  module Print =
 
@@ -108,15 +121,23 @@ module Scrabble =
 
             // remove the force print when you move on from manual input (or when you have learnt the format)
             forcePrint "Input move (format '(<x-coordinate> <y-coordinate> <piece id><character><point-value> )*', note the absence of space between the last inputs)\n\n"
-            let input =  System.Console.ReadLine()
-            let move = RegEx.parseMove input (*vi skal have lavet en funktion lige her, som efter en eller anden heuristik kan finde det næste move*)
+            let input = System.Console.ReadLine()
+            let action = input.Substring(0, 2)
+            let command = (input.Substring 3)
+            match action with
+            | "mo" ->
+                let move = RegEx.parseMove (command)
+                debugPrint (sprintf "Player %d -> Server:\n%A\n" (State.playerNumber st) move)
+                send cstream (SMPlay move)
+            |"ch" ->
+                let piecesToChange = RegEx.parseChangePieces command
+                //debugPrint (sprintf "Player %d <- Server:\n%A\n" (State.playerNumber st) move)
+                send cstream (SMChange piecesToChange)
+            | _ -> failwith "todo"  (*vi skal have lavet en funktion lige her, som efter en eller anden heuristik kan finde det næste move*)
                             
-       
-            debugPrint (sprintf "Player %d -> Server:\n%A\n" (State.playerNumber st) move) // keep the debug lines. They are useful.
-            send cstream (SMPlay move)
 
             let msg = recv cstream
-            debugPrint (sprintf "Player %d <- Server:\n%A\n" (State.playerNumber st) move) // keep the debug lines. They are useful.
+            //debugPrint (sprintf "Player %d <- Server:\n%A\n" (State.playerNumber st) move) // keep the debug lines. They are useful.
             
             
             match msg with
@@ -124,10 +145,10 @@ module Scrabble =
                 (* Successful play by you. Update your state (remove old tiles, add the new ones, change turn, etc) *)
                 printf("succesful play by you!")
                 
-                (*forcePrint $"Variables:!
+                forcePrint $"Variables:!
                       ms = %A{ms}
                       points = %d{points}
-                      newPieces = %A{newPieces}\n\n"*)
+                      newPieces = %A{newPieces}\n\n"
                 let usedTileIds = State.getUsedTileIdFromMove move
                 let currentHand = State.removeFromHandSet usedTileIds st.hand  
                 let nextHand = State.addToHandSet newPieces currentHand
@@ -161,8 +182,9 @@ module Scrabble =
                 aux st'
             | RCM(CMChangeSuccess(newPieces)) ->
                 printf("You changed pieces")
-                let newHand = List.fold (fun acc (x, k) -> MultiSet.add x k acc) MultiSet.empty newPieces
-                let st' = State.mkState st.board st.dict st.numberofPlayers  st.playerNumber  (State.changePlayerTurn st) newHand st.ForfeitedPlayers st.boardTiles
+                let currentHand = State.removeFromHandSet (RegEx.parseChangePieces command) st.hand  
+                let nextHand = State.addToHandSet newPieces st.hand
+                let st' = State.mkState st.board st.dict st.numberofPlayers  st.playerNumber  (State.changePlayerTurn st) nextHand st.ForfeitedPlayers st.boardTiles
                 aux st'
             | RCM(CMChange(playerId, numberOfTiles)) ->
                 printf($"Player %d{playerId} changed %d{numberOfTiles} pieces")              
