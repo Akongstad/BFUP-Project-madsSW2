@@ -49,7 +49,9 @@ module State =
 
         dict          : Dictionary.Dict
         numberofPlayers : uint32
-        ForfeitedPlayers : MultiSet.MultiSet<uint32>
+
+        ForfeitedPlayers : List<uint32>
+
         playerNumber  : uint32
         playerTurn    : uint32
         hand          : MultiSet.MultiSet<uint32>
@@ -83,13 +85,15 @@ module Scrabble =
             forcePrint "Input move (format '(<x-coordinate> <y-coordinate> <piece id><character><point-value> )*', note the absence of space between the last inputs)\n\n"
             let input =  System.Console.ReadLine()
             let move = RegEx.parseMove input (*vi skal have lavet en funktion lige her, som efter en eller anden heuristik kan finde det næste move*)
+           
             let changePlayerTurn (st: State.state) =
                 let rec player pnr =
                     if st.numberofPlayers = pnr then
-                        if contains 1u st.ForfeitedPlayers then
+                        if List.contains 1u st.ForfeitedPlayers then
                             player 1u
                         else 1u
-                    else if (contains (pnr+1u ) st.ForfeitedPlayers) then
+                    else if (List.contains (pnr+1u ) st.ForfeitedPlayers) then
+
                             player st.playerTurn +  1u
                          else st.playerTurn +  1u
                 player st.playerNumber
@@ -100,13 +104,16 @@ module Scrabble =
 
             let msg = recv cstream
             debugPrint (sprintf "Player %d <- Server:\n%A\n" (State.playerNumber st) move) // keep the debug lines. They are useful.
-
+            
+            
             match msg with
             | RCM (CMPlaySuccess(ms, points, newPieces)) ->
                 (* Successful play by you. Update your state (remove old tiles, add the new ones, change turn, etc) *)
 
                 printf("succesful play by you!")
-                let state = State.mkState st.board st.dict st.numberofPlayers st.playerNumber   (changePlayerTurn st) st.ForfeitedPlayers st.hand
+
+                let state = State.mkState st.board st.dict st.numberofPlayers st.playerNumber   (changePlayerTurn st)  st.hand st.ForfeitedPlayers
+
                 aux state 
                 
             | RCM (CMPlayed (pid, ms, points)) ->
@@ -123,8 +130,10 @@ module Scrabble =
                 //aux state 
             | RCM (CMForfeit playerId) ->
                 printf("Player {pid} forfeited")
-                let updatedForfeitedPlayers (st : State.state) = addSingle playerId st.ForfeitedPlayers
-                let state = State.mkState st.board st.dict st.numberofPlayers  st.playerNumber  (changePlayerTurn st) (updatedForfeitedPlayers st)  st.hand
+
+                let updatedForfeitedPlayers (st : State.state) = List.insertAt 1 playerId st.ForfeitedPlayers
+                let state = State.mkState st.board st.dict st.numberofPlayers  st.playerNumber  (changePlayerTurn st)   st.hand (updatedForfeitedPlayers st)
+
                 aux state
             | RCM (CMGameOver _) -> ()
             | RCM a -> failwith (sprintf "not implmented: %A" a)
@@ -157,11 +166,13 @@ module Scrabble =
         //let dict = dictf true // Uncomment if using a gaddag for your dictionary
         let dict = dictf false // Uncomment if using a trie for your dictionary
         let board = Parser.mkBoard boardP
-        let forfeitedPlayers = empty
+
+        let forfeitedPlayers = List.Empty
                   
         let handSet = List.fold (fun acc (x, k) -> MultiSet.add x k acc) MultiSet.empty hand
 
-        fun () -> playGame cstream tiles (State.mkState board dict numPlayers playerNumber playerTurn forfeitedPlayers handSet)
+        fun () -> playGame cstream tiles (State.mkState board dict numPlayers playerNumber playerTurn  handSet forfeitedPlayers)
+
         
         
         // '(<x-coordinate> <y-coordinate> <piece id><character><point-value> )
