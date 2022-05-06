@@ -1,12 +1,16 @@
 ﻿namespace madsSW2
 
 open System.Security.AccessControl
+open MultiSet
 open ScrabbleUtil
+open ScrabbleUtil.Dictionary
 open ScrabbleUtil.ServerCommunication
 
 open System.IO
 
 open ScrabbleUtil.DebugPrint
+open StateMonad
+open madsSW2
 
 // The RegEx module is only used to parse human input. It is not used for the final product.
 
@@ -147,7 +151,7 @@ module State =
         let boardTiles = st.boardTiles
         
         
-        let coords = List.ofArray boardTiles.Keys
+        let coords = List.ofSeq boardTiles.Keys
         
         let auxCheckedCoords = List.empty
         
@@ -155,6 +159,7 @@ module State =
         let rec aux (c:coord) (v:(char*int)) =
             if List.contains c auxCheckedCoords
             then coords = coords.Tail
+            else
             
             let dirClear = getDirectionClear c st
             match dirClear with
@@ -163,12 +168,24 @@ module State =
                     coords = coords.tail
                     aux coords.Head boardTiles[coords.Head]
                 |Both -> dunno
-                |Top -> 
+                |Top ->
+                    let bka = step 'c' dict
+                    
             
             
             
+        aux coords.Head boardTiles[coords.Head]
+        
+    let rec traverseTrie (st:state) (hand:MultiSet.MultiSet<uint32>) (dict:Dict) (cList:List<char>) (c:char) =  
+        MultiSet. ::cList
+        
+        let rec stepNextChar (c:char)
+            match step c dict with
+            |None -> None
             
-        aux coords.Head boardTiles[coords.Head]    
+            
+        
+        
 
 module Scrabble =
     open System.Threading
