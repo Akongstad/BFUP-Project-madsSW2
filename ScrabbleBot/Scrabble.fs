@@ -30,6 +30,19 @@ module RegEx =
                     ((x |> int, y |> int), (id |> uint32, (c |> char, p |> int)))
                 | _ -> failwith "Failed (should never happen)") |>
         Seq.toList
+    let parseChangePieces ts =
+        printf("parsing move\n")
+        let pattern = @"([\d]){1,2}" 
+        Regex.Matches(ts, pattern) |>
+        Seq.cast<Match> |>
+           
+        Seq.map 
+            (fun t -> 
+                match t.Value with
+                | Regex pattern [id;] ->
+                    (id |> uint32)
+                | _ -> failwith "Failed (should never happen)") |>
+        Seq.toList
 
  module Print =
 
@@ -108,23 +121,36 @@ module Scrabble =
 
             // remove the force print when you move on from manual input (or when you have learnt the format)
             forcePrint "Input move (format '(<x-coordinate> <y-coordinate> <piece id><character><point-value> )*', note the absence of space between the last inputs)\n\n"
-            let input =  System.Console.ReadLine()
-            let move = RegEx.parseMove input (*vi skal have lavet en funktion lige her, som efter en eller anden heuristik kan finde det næste move*)
+            let input = System.Console.ReadLine()
+            let action = input.Substring(0, 2)
+            let command = (input.Substring 3)
+            match action with
+            | "mo" ->
+                let move = RegEx.parseMove (command)
+                debugPrint (sprintf "Player %d -> Server:\n%A\n" (State.playerNumber st) move)
+                send cstream (SMPlay move)
+            |"ch" ->
+                let piecesToChange = RegEx.parseChangePieces command
+                //debugPrint (sprintf "Player %d <- Server:\n%A\n" (State.playerNumber st) move)
+                send cstream (SMChange piecesToChange)
+            | _ -> failwith "todo"  (*vi skal have lavet en funktion lige her, som efter en eller anden heuristik kan finde det næste move*)
                             
-       
-            debugPrint (sprintf "Player %d -> Server:\n%A\n" (State.playerNumber st) move) // keep the debug lines. They are useful.
-            send cstream (SMPlay move)
-
+            (*let move = RegEx.parseMove (command)
+            debugPrint (sprintf "Player %d -> Server:\n%A\n" (State.playerNumber st) move)
+            send cstream (SMPlay move)*)
             let msg = recv cstream
-            debugPrint (sprintf "Player %d <- Server:\n%A\n" (State.playerNumber st) move) // keep the debug lines. They are useful.
+            //debugPrint (sprintf "Player %d <- Server:\n%A\n" (State.playerNumber st) move) // keep the debug lines. They are useful.
             
             
             match msg with
             | RCM (CMPlaySuccess(ms, points, newPieces)) ->
                 (* Successful play by you. Update your state (remove old tiles, add the new ones, change turn, etc) *)
-
                 printf("succesful play by you!")
-             
+                
+                forcePrint $"Variables:!
+                      ms = %A{ms}
+                      points = %d{points}
+                      newPieces = %A{newPieces}\n\n"
                 let usedTileIds = State.getUsedTileIdFromMove move
                 let currentHand = State.removeFromHandSet usedTileIds st.hand  
                 let nextHand = State.addToHandSet newPieces currentHand
@@ -133,6 +159,7 @@ module Scrabble =
                 
                 let st' = State.mkState st.board st.dict st.numberofPlayers st.playerNumber (State.changePlayerTurn st) nextHand st.ForfeitedPlayers newBoardTiles
                 aux st'
+
                 
             | RCM (CMPlayed (pid, ms, points)) ->
                 (* Successful play by other player. Update your state *)
@@ -147,20 +174,28 @@ module Scrabble =
                 (* Failed play. Update your state *)
                 printf("failed play by you!")
                 
-                let st' = State.mkState st.board st.dict st.numberofPlayers st.playerNumber (State.changePlayerTurn st) st.hand st.ForfeitedPlayers st.boardTiles  // This state needs to be updated
+                let st' = State.mkState st.board st.dict st.numberofPlayers st.playerNumber (State.changePlayerTurn st) st.hand st.ForfeitedPlayers st.boardTiles 
                 aux st'
                 
             | RCM (CMForfeit playerId) ->
                 printf("Player {pid} forfeited")
-
-                let st' = State.mkState st.board st.dict st.numberofPlayers  st.playerNumber  (State.changePlayerTurn st) st.hand (State.updatedForfeitedPlayers st playerId) st.boardTiles
+                let updatedForfeitedPlayers (st : State.state) = List.insertAt 1 playerId st.ForfeitedPlayers
+                let st' = State.mkState st.board st.dict st.numberofPlayers  st.playerNumber  (State.changePlayerTurn st)   st.hand (updatedForfeitedPlayers st) st.boardTiles
                 aux st'
-                
+            | RCM(CMChangeSuccess(newPieces)) ->
+                printf("You changed pieces")
+                let currentHand = State.removeFromHandSet (RegEx.parseChangePieces command) st.hand  
+                let nextHand = State.addToHandSet newPieces st.hand
+                let st' = State.mkState st.board st.dict st.numberofPlayers  st.playerNumber  (State.changePlayerTurn st) nextHand st.ForfeitedPlayers st.boardTiles
+                aux st'
+            | RCM(CMChange(playerId, numberOfTiles)) ->
+                printf($"Player %d{playerId} changed %d{numberOfTiles} pieces")              
+                let st' = State.mkState st.board st.dict st.numberofPlayers  st.playerNumber  (State.changePlayerTurn st) st.hand st.ForfeitedPlayers st.boardTiles
+                aux st'
             | RCM (CMGameOver _) -> ()
             | RCM a -> failwith (sprintf "not implmented: %A" a)
             | RGPE err ->
                 printfn "Gameplay Error:\n%A" err
-                
                 let st' = State.mkState st.board st.dict st.numberofPlayers st.playerNumber (State.changePlayerTurn st) st.hand st.ForfeitedPlayers st.boardTiles
                 aux st'
            
@@ -176,13 +211,13 @@ module Scrabble =
             (tiles : Map<uint32, tile>)
             (timeout : uint32 option) 
             (cstream : Stream) =
-        debugPrint 
-            (sprintf "Starting game!
-                      number of players = %d
-                      player id = %d
-                      player turn = %d
-                      hand =  %A
-                      timeout = %A\n\n" numPlayers playerNumber playerTurn hand timeout)
+        forcePrint 
+            $"Starting game!
+                      number of players = %d{numPlayers}
+                      player id = %d{playerNumber}
+                      player turn = %d{playerTurn}
+                      hand =  %A{hand}
+                      timeout = %A{timeout}\n\n"
             
            
         //let dict = dictf true // Uncomment if using a gaddag for your dictionary
@@ -199,8 +234,7 @@ module Scrabble =
         
         fun () -> playGame cstream tiles (State.mkState board dict numPlayers playerNumber playerTurn  handSet forfeitedPlayers boardTiles)
 
-        
-        
+      
         // '(<x-coordinate> <y-coordinate> <piece id><character><point-value> )
         (*HEURISTIC*)
         //let bestMove (st : State.state)
