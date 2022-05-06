@@ -1,5 +1,6 @@
 ﻿namespace madsSW2
 
+open System.Security.AccessControl
 open ScrabbleUtil
 open ScrabbleUtil.ServerCommunication
 
@@ -108,6 +109,66 @@ module State =
                          else st.playerTurn +  1u
                 player st.playerNumber
     let updatedForfeitedPlayers (st : state) playerId = playerId::st.ForfeitedPlayers
+    
+    
+    type directionClear =
+        |Top
+        |Left
+        |Both
+        |Neither
+
+    let directionClear (c:coord) (st:state) direction =
+        match direction with
+        | Top -> match Map.tryFind (fst(c),snd(c)+1) st.boardTiles with
+                |None -> true
+                |_ -> false
+        | Left -> match Map.tryFind (fst(c)-1,snd(c)) st.boardTiles with
+                |None -> true
+                |_ -> false
+            
+    let getDirectionClear (c:coord) (st:state) :directionClear =
+        let topClear =  Map.containsKey (fst(c),snd(c)+1) st.boardTiles
+        let leftClear = Map.containsKey (fst(c)+1,snd(c)) st.boardTiles
+        match topClear,leftClear with
+        |true, true -> Both
+        |false, false -> Neither
+        |true, false -> Top
+        |false, true  -> Left
+        
+        
+        
+            
+    // '(<x-coordinate> <y-coordinate> <piece id><character><point-value> )
+    (*HEURISTIC*)
+    let bestMove (st : state) =
+        let board = st.board
+        let hand = st.hand
+        let dict = st.dict
+        let boardTiles = st.boardTiles
+        
+        
+        let coords = List.ofArray boardTiles.Keys
+        
+        let auxCheckedCoords = List.empty
+        
+        
+        let rec aux (c:coord) (v:(char*int)) =
+            if List.contains c auxCheckedCoords
+            then coords = coords.Tail
+            
+            let dirClear = getDirectionClear c st
+            match dirClear with
+                |Neither ->
+                    c::auxCheckedCoords
+                    coords = coords.tail
+                    aux coords.Head boardTiles[coords.Head]
+                |Both -> dunno
+                |Top -> 
+            
+            
+            
+            
+        aux coords.Head boardTiles[coords.Head]    
 
 module Scrabble =
     open System.Threading
@@ -201,6 +262,7 @@ module Scrabble =
            
         aux st
 
+    
     let startGame 
             (boardP : boardProg) 
             (dictf : bool -> Dictionary.Dict) 
@@ -234,26 +296,29 @@ module Scrabble =
         
         fun () -> playGame cstream tiles (State.mkState board dict numPlayers playerNumber playerTurn  handSet forfeitedPlayers boardTiles)
 
-      
-        // '(<x-coordinate> <y-coordinate> <piece id><character><point-value> )
-        (*HEURISTIC*)
-        //let bestMove (st : State.state)
-           (* let board = st.board
-            let squares = board.squares
-            let hand = st.hand
-            let dict = st.dict
-            
-            let rec aux (c:Coord) (x:int) (y:int) =
-                
-                
-                
-                
-            
-           
-            
-            
-           aux(board.center)  *)          
+
             
             
             //((x |> int, y |> int), (id |> uint32, (c |> char, p |> int)))
-
+        
+        (*let spiral (X:int) (Y:int) =
+            let x,y = 0
+            let dx = 0
+            let dy = -1
+            let maxSquared = sqrt(max(X,Y))
+            let counter = 0
+            
+            let rec aux x y X Y count=
+                if (-X/2 < x <= X/2) && (-Y/2 < y <= Y/2)
+                then printf(x,y)
+                if x == y && (x < 0 && x == -y) && (x > 0 && x == 1-y)
+                then
+                    dx, dy = -dy, dx
+                
+                x, y = x+dx, y+dy    
+           
+        aux x y X Y  *)      
+                
+                
+       
+            
