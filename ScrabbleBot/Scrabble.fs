@@ -1,5 +1,6 @@
 ﻿namespace madsSW2
 
+open System
 open System.Security.AccessControl
 open MultiSet
 open ScrabbleUtil
@@ -10,8 +11,6 @@ open System.IO
 
 open ScrabbleUtil.DebugPrint
 open StateMonad
-open madsSW2
-
 // The RegEx module is only used to parse human input. It is not used for the final product.
 
 module RegEx =
@@ -144,7 +143,7 @@ module State =
             
     // '(<x-coordinate> <y-coordinate> <piece id><character><point-value> )
     (*HEURISTIC*)
-    let bestMove (st : state) =
+    (*let bestMove (st : state) =
         let board = st.board
         let hand = st.hand
         let dict = st.dict
@@ -170,23 +169,39 @@ module State =
                 |Both -> dunno
                 |Top ->
                     let bka = step 'c' dict
-                    
-            
-            
-            
-        aux coords.Head boardTiles[coords.Head]
-        
-    let rec traverseTrie (st:state) (hand:MultiSet.MultiSet<uint32>) (dict:Dict) (cList:List<char>) (c:char) =  
-        MultiSet. ::cList
-        
-        let rec stepNextChar (c:char)
-            match step c dict with
-            |None -> None
-            
-            
-        
-        
+                    *)
 
+           
+            
+        (*aux coords.Head boardTiles[coords.Head]*)
+        
+    let rec findPlayableTiles (st:state) (hand:MultiSet.MultiSet<uint32>) (dict:Dict) (boardChars:Map<coord,char*int>) (tiles:Map<uint32, tile>) =
+        //Step with word/chars already on the board.
+        let newDict = 
+            Map.fold (
+                fun acc (a:coord) b  ->
+                 match (Dictionary.step (fst b) acc) with
+                 | None -> failwith "Invalid boardChars" //Should never
+                 | Some(_, dic) -> dic
+               ) dict boardChars 
+        
+        //Find word from tiles in hand
+        let rec aux (hand:MultiSet.MultiSet<uint32>) (dict:Dict) (move:List<uint*(char*int)>) (tiles:Map<uint32, tile>) = 
+            MultiSet.fold(
+                fun _ letterIndex _  ->
+                let tile = tiles.Item letterIndex
+                Set.fold (
+                    fun acc' elem -> 
+                        let prime = (letterIndex, elem)
+                        match step (fst elem) dict with
+                        | None -> [] //No move
+                        | Some(false, dic) -> aux (MultiSet.removeSingle letterIndex hand) dic (prime::acc') tiles
+                        | Some(true, _) -> (prime::acc')
+                    ) move tile
+                )move hand
+        aux hand newDict [] tiles
+                    
+                   
 module Scrabble =
     open System.Threading
     
@@ -202,14 +217,14 @@ module Scrabble =
             let input = System.Console.ReadLine()
             let action = input.Substring(0, 2)
             let command = (input.Substring 3)
+            let move = RegEx.parseMove (command)
             match action with
             | "mo" ->
-                let move = RegEx.parseMove (command)
                 debugPrint (sprintf "Player %d -> Server:\n%A\n" (State.playerNumber st) move)
                 send cstream (SMPlay move)
             |"ch" ->
                 let piecesToChange = RegEx.parseChangePieces command
-                //debugPrint (sprintf "Player %d <- Server:\n%A\n" (State.playerNumber st) move)
+                debugPrint (sprintf "Player %d <- Server:\n%A\n" (State.playerNumber st) piecesToChange)
                 send cstream (SMChange piecesToChange)
             | _ -> failwith "todo"  (*vi skal have lavet en funktion lige her, som efter en eller anden heuristik kan finde det næste move*)
                             

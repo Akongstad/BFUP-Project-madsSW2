@@ -1,10 +1,8 @@
-
 module Dictionary
 
 type Dictionary =
     | Leaf of bool
     | Node of bool * Map<char, Dictionary>
-
 
 
 let empty () = Leaf false
@@ -31,7 +29,7 @@ let isTrue =
     | Leaf b -> b
     | Node (b, _) -> b
 
-let rec step c =
+let step c =
     function
     | Leaf _ -> None
     | Node (_, map) when not (map.ContainsKey c) -> None
