@@ -135,7 +135,9 @@ module Scrabble =
                 send cstream (SMChange piecesToChange)
             | _ -> failwith "todo"  (*vi skal have lavet en funktion lige her, som efter en eller anden heuristik kan finde det næste move*)
                             
-
+            (*let move = RegEx.parseMove (command)
+            debugPrint (sprintf "Player %d -> Server:\n%A\n" (State.playerNumber st) move)
+            send cstream (SMPlay move)*)
             let msg = recv cstream
             //debugPrint (sprintf "Player %d <- Server:\n%A\n" (State.playerNumber st) move) // keep the debug lines. They are useful.
             
