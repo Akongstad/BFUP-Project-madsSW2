@@ -89,7 +89,6 @@ module Scrabble =
             Print.printHand pieces (State.hand st)
             Print.printPrefixes st.horizontalPrefixes
                    
-            // remove the force print when you move on from manual input (or when you have learnt the format)
             forcePrint "Input move (format '(<x-coordinate> <y-coordinate> <piece id><character><point-value> )*', note the absence of space between the last inputs)\n\n"
             
             (* let input = System.Console.ReadLine()
@@ -97,16 +96,18 @@ module Scrabble =
             ManualPlay.parsePlayerMove cstream st input *)
             
             //FOR Playing with bot
+            forcePrint $"Turn = %d{st.playerTurn} %d{st.playerNumber}"
             match (st.playerTurn = st.playerNumber ) with
             | true -> 
                 let move = generateAction st
                 match List.length move with
-                | 0 -> send cstream SMPass
+                | 0 -> send cstream SMChange
                 | _ -> send cstream (SMPlay move )
             | _ -> failwith "How do we wait?"
-
-            let msg = recv cstream
-            //debugPrint (sprintf "Player %d <- Server:\n%A\n" (State.playerNumber st) move) // keep the debug lines. They are useful.
+            
+            //debugPrint (sprintf "Player %d <- Server:\n%A\n" (State.playerNumber st) move)
+            
+            let msg = recv cstream 
             match msg with
             | RCM (CMPlaySuccess(ms, points, newPieces)) ->
                 (* Successful play by you. Update your state (remove old tiles, add the new ones, change turn, etc) *)

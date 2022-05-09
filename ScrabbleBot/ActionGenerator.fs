@@ -113,21 +113,25 @@ let rec findMove hand dict placedTiles tiles (prefixList:List<coord * list<(int 
         match move with 
         | [] -> findMove hand dict placedTiles tiles t isHorizontal
         | _ -> move
-
-
+        
 
 let generateAction (st:state) = 
-    //if Map.isEmpty st.placedTiles then findPlayableTiles st.hand startCoord (0,0) true else 
-    let verticalPrefixList = Map.toList st.verticalPrefixes
-    let horizontalPrefixList = Map.toList st.horizontalPrefixes
+    if Map.isEmpty st.placedTiles
+    then //place first move center on empty board.
+        let centerMove = findPlayableTiles st.hand st.dict Map.empty st.tiles true (0,0)
+        match centerMove.Length with
+        |0 -> [] //pass
+        |_ ->   [] //play move
+    else //find move
+        let verticalPrefixList = Map.toList st.verticalPrefixes
+        let horizontalPrefixList = Map.toList st.horizontalPrefixes
 
-    let verticalMove = findMove st.hand st.dict st.placedTiles st.tiles verticalPrefixList false
-    let horizontalMove = findMove st.hand st.dict st.placedTiles st.tiles horizontalPrefixList true 
+        let verticalMove = findMove st.hand st.dict st.placedTiles st.tiles verticalPrefixList false
+        let horizontalMove = findMove st.hand st.dict st.placedTiles st.tiles horizontalPrefixList true 
 
-    match verticalMove.Length, horizontalMove.Length  with 
-    |0,0 -> []//change pieces?
-    |0,_ -> horizontalMove
-    |_,0 -> verticalMove
-    |x,y -> if x >=y then verticalMove else horizontalMove
+        match verticalMove.Length, horizontalMove.Length  with 
+        |0,0 -> []//change pieces?
+        |0,_ -> horizontalMove
+        |_,0 -> verticalMove
+        |x,y -> if x >=y then verticalMove else horizontalMove
 
-    //if Map.isEmpty st.placedTiles then findPlayableTiles st.hand startCoord (0,0) true else 
