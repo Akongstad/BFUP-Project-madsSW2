@@ -50,19 +50,18 @@ module RegEx =
     let printHand pieces hand =
         hand |>
         MultiSet.fold (fun _ x i -> forcePrint (sprintf "%d -> (%A, %d)\n" x (Map.find x pieces) i)) ()
+    
     let printPrefixes (prefixes: Map<coord,((int * int) * (uint * (char * int))) list>) = 
         prefixes |>
-        Map.fold (fun _ x i -> 
-            i |>
-            List.fold (fun _ (coord, (ui)) -> forcePrint (sprintf "(%d,%d) -> (%A)\n" (Coord.getX x) (Coord.getY x) ui )) ()) ()
+        Map.fold (fun _ x i -> forcePrint (sprintf "%A -> (%A)\n" x i)) ()
 
 module ManualPlay =
     let handToIdList hand = hand |> MultiSet.fold (fun acc x _ -> x::acc ) []
-    let parsePlayerMove cstream st (input:string) =
+    let parsePlayerAction cstream st (input:string) =
         let action = input.Substring(0, 2)
         match action with
         | "mo" ->
-            forcePrint "PLayer wants to move\n"
+            forcePrint "Player wants to move\n"
             let command = (input.Substring 3)
             let move = RegEx.parseMove (command)
             debugPrint (sprintf "Player %d -> Server:\n%A\n" (State.playerNumber st) move)
@@ -87,23 +86,30 @@ module Scrabble =
 
         let rec aux (st : State.state) =
             Print.printHand pieces (State.hand st)
+            
+            forcePrint $"Horizontal:  "
             Print.printPrefixes st.horizontalPrefixes
-                   
+            
+            forcePrint $"Vertical:  "
+            Print.printPrefixes st.verticalPrefixes
+            
+            forcePrint $"Turn = %d{st.playerTurn} %d{st.playerNumber}\n0 "
             forcePrint "Input move (format '(<x-coordinate> <y-coordinate> <piece id><character><point-value> )*', note the absence of space between the last inputs)\n\n"
             
-            (* let input = System.Console.ReadLine()
+            let input = System.Console.ReadLine()
             //For playing manually:
-            ManualPlay.parsePlayerMove cstream st input *)
-            
+            let move = RegEx.parseMove (input)
+            debugPrint (sprintf "Player %d -> Server:\n%A\n" (State.playerNumber st) move)
+            send cstream (SMPlay move)
+
             //FOR Playing with bot
-            forcePrint $"Turn = %d{st.playerTurn} %d{st.playerNumber}"
-            match (st.playerTurn = st.playerNumber ) with
+           (*  match (st.playerTurn = st.playerNumber ) with
             | true -> 
                 let move = generateAction st
                 match List.length move with
                 | 0 -> send cstream SMChange
                 | _ -> send cstream (SMPlay move )
-            | _ -> failwith "How do we wait?"
+            | _ -> failwith "How do we wait?" *)
             
             //debugPrint (sprintf "Player %d <- Server:\n%A\n" (State.playerNumber st) move)
             
@@ -111,6 +117,7 @@ module Scrabble =
             match msg with
             | RCM (CMPlaySuccess(ms, points, newPieces)) ->
                 (* Successful play by you. Update your state (remove old tiles, add the new ones, change turn, etc) *)
+                forcePrint( sprintf "ms: %A \n" ms)
                 printf("succesful play by you!\n")    
                 let st' = updateStatePlaySuccess st ms points newPieces
                 aux st'

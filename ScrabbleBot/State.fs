@@ -51,46 +51,77 @@ module internal State =
     // move: ((int * int) * (uint32 * (char * int))) list
     //helper methods
 
-    let isHorizontal (ms:((int * int) * (uint * (char * int))) list) =
-        (List.head ms |> fst |> fst) = (List.last ms |> fst |> fst)
+    type directionClear =
+        |Top
+        |Left
+        |Both
+        |Neither
 
-    let rec findStartIndexHorizontal (x,y) (st:state) =
-        match st.horizontalPrefixes.ContainsKey (x,y) with
-        | false -> findStartIndexHorizontal (x-1,y) st
+    let getDirectionClear (c:coord) (st:state) :directionClear =
+        let topClear =  Map.containsKey (fst(c),snd(c)+1) st.placedTiles
+        let leftClear = Map.containsKey (fst(c)+1,snd(c)) st.placedTiles
+        match topClear, leftClear with
+        |true, true -> Both
+        |false, false -> Neither
+        |true, false -> Top
+        |false, true  -> Left
+
+    let isHorizontal (ms:((int * int) * (uint * (char * int))) list) (st:state) =
+        if ms.Length = 1 then
+            let directionClear = getDirectionClear (coord(fst(List.head ms))) st
+            match directionClear with
+            |Neither -> failwith "Edge case is both horizontal and vertical prefix"
+            |Top -> true
+            |Left -> false 
+            | _ -> failwith "impossible"
+        else
+            let firstX = (List.head ms |> fst |> fst)
+            let lastX =  (List.last ms |> fst |> fst)
+            not(firstX = lastX)
+
+    let rec findStartIndexHorizontal (x,y) prefixes =
+        match Map.containsKey (x,y) prefixes with
+        | false -> findStartIndexHorizontal (x-1,y) prefixes
         | true -> coord(x,y)
 
-    let rec findStartIndexVertical (x,y) (st:state) =
-        match st.verticalPrefixes.ContainsKey (x,y) with
-        | false -> findStartIndexVertical (x,y-1) st
+    let rec findStartIndexVertical (x,y) prefixes =
+        match Map.containsKey (x,y) prefixes with
+        | false -> findStartIndexVertical (x,y-1) prefixes
         | true -> coord(x,y)
 
-    let addOpposite (x,y) (st:state) (ms:((int * int) * (uint * (char * int))) list) isHorizontal = 
-        List.fold (fun acc ((x,y),(_)) -> 
+    let addOpposite (prefixes) (placedTiles) (ms:((int * int) * (uint * (char * int))) list) isHorizontal = 
+        List.fold (fun acc ((x,y),(tile)) -> 
                 let coordDecrement =
                     if isHorizontal then (x-1,y)
                     else (x,y-1)
-                match Map.containsKey coordDecrement st.placedTiles with
-                | false -> Map.add (x,y) ms st.verticalPrefixes
+                
+                match Map.containsKey coordDecrement placedTiles with
+                | false -> Map.add (x,y) [((x,y),(tile))] acc
                 | true -> 
-                    let startCord = findStartIndexVertical (x,y) st
-                    let oldPrefix = Map.find (startCord) st.verticalPrefixes
-                    let newMap = st.verticalPrefixes.Remove (startCord)
-                    Map.add (startCord) (List.append oldPrefix ms)newMap) Map.empty ms
+                    let startCord = 
+                        match isHorizontal with 
+                        | true -> findStartIndexHorizontal (x,y) prefixes
+                        | false -> findStartIndexVertical (x,y) prefixes
+                    let oldPrefix = Map.find (startCord) prefixes
+                    let newMap = Map.remove (startCord) prefixes
+                    Map.add (startCord) (oldPrefix @ [((x,y),(tile))])newMap
+                    ) prefixes ms
                 
     let addHorizontalPrefix (x,y) (st:state) (ms:((int * int) * (uint * (char * int))) list)  = 
         match Map.containsKey (x-1,y) st.placedTiles with
         | false -> 
-            //This move is a new prefix
+             //Only first move
+            //This move is a new prefix. //Only first move
             let newHorizontal = Map.add (x,y) ms st.horizontalPrefixes
-            let newVertical = addOpposite (x,y) st ms false
+            let newVertical = addOpposite st.verticalPrefixes st.placedTiles ms false
             newHorizontal,newVertical
         | true ->
             //This move is an extension of a prefix
-            let startCord = findStartIndexHorizontal (x,y) st
-            let oldPrefix = Map.find (startCord) st.horizontalPrefixes
-            let newMap = st.horizontalPrefixes.Remove startCord
-            let newHorizontal = Map.add startCord (List.append oldPrefix ms) newMap
-            let newVertical = addOpposite (x,y) st ms false
+            let startCord = findStartIndexHorizontal (x,y) st.horizontalPrefixes
+            let oldPrefix = Map.find startCord st.horizontalPrefixes
+            let newMap = Map.remove startCord st.horizontalPrefixes
+            let newHorizontal = Map.add startCord (oldPrefix @ ms) newMap
+            let newVertical = addOpposite st.verticalPrefixes st.placedTiles ms false
             newHorizontal, newVertical
     
     let addVerticalPrefix (x,y) (st:state) (ms:((int * int) * (uint * (char * int))) list)  = 
@@ -98,19 +129,19 @@ module internal State =
         | false -> 
             //This move is a new prefix
             let newVertical = Map.add (x,y) ms st.verticalPrefixes
-            let newHorizontal = addOpposite (x,y) st ms true
+            let newHorizontal = addOpposite  st.horizontalPrefixes st.placedTiles ms true
             newHorizontal, newVertical
         | true ->
             //This move is an extension of a prefix
-            let startCord = findStartIndexVertical (x,y) st
+            let startCord = findStartIndexVertical (x,y) st.verticalPrefixes
             let oldPrefix = Map.find (startCord) st.verticalPrefixes
-            let newMap = st.verticalPrefixes.Remove startCord
+            let newMap = Map.remove startCord st.verticalPrefixes
             let newVertical = Map.add startCord (List.append oldPrefix ms) newMap
-            let newHorizontal = addOpposite (x,y) st ms true
+            let newHorizontal = addOpposite  st.horizontalPrefixes st.placedTiles ms true
             newHorizontal, newVertical
 
     let addPrefix (startCoord:coord) (st:state) (ms:((int * int) * (uint * (char * int))) list) = 
-        match isHorizontal ms with
+        match isHorizontal ms st with
         |true -> 
             addHorizontalPrefix (Coord.getX startCoord, Coord.getY startCoord) st ms
         |false ->
@@ -119,7 +150,7 @@ module internal State =
     let getWordAndCoordFromMoveHorizontol moveList placedWords =
         List.fold (fun acc (x,k) -> Map.add (coord(x), moveList))
         
-    let getCoordAndTileFromMove moveList placedTiles = 
+    let getCoordAndTileFromMove moveList (placedTiles: Map<coord,(uint*(char*int))>) = 
         List.fold (fun acc (x,k) -> Map.add (coord(x)) (k) acc) placedTiles moveList //get list of coord and (char * char point val)
         
     let getUsedTileIdFromMove moveList = 
@@ -155,25 +186,33 @@ module internal State =
     
     let updateStatePlaySuccess st ms points newPieces =
                 let usedTileIds = getUsedTileIdFromMove ms
+                
                 let currentHand = removeFromHandSet usedTileIds st.hand  
+
                 let nextHand = addToHandSet newPieces currentHand      
+
                 let newBoardTiles = getCoordAndTileFromMove ms st.placedTiles
+
                 let prefixStartCoord = ms.Head |> fst
+
                 let newPrefixes = addPrefix prefixStartCoord st ms
+
                 {st with 
                     playerTurn = changePlayerTurn st; 
-                    hand= nextHand; placedTiles=newBoardTiles; 
+                    hand= nextHand;
+                    placedTiles=newBoardTiles;
                     horizontalPrefixes = newPrefixes |> fst; 
-                    verticalPrefixes = newPrefixes|>snd}
+                    verticalPrefixes = newPrefixes |> snd}
+                    
     
     let updateStatePlayed st pid ms points =
         let newBoardTiles = getCoordAndTileFromMove ms st.placedTiles
         let newPrefixes = addPrefix (fst ms.Head) st ms
         {st with 
             playerNumber=changePlayerTurn st; 
-            placedTiles=newBoardTiles; 
+            placedTiles = newBoardTiles;
             horizontalPrefixes = newPrefixes |> fst; 
-            verticalPrefixes = newPrefixes|>snd }
+            verticalPrefixes = newPrefixes |> snd}
     
     let  updateStatePlayerPassed st =
         {st with playerTurn = changePlayerTurn st}
@@ -186,34 +225,3 @@ module internal State =
         let nextHand = addToHandSet newPieces MultiSet.empty
         {st with playerTurn = changePlayerTurn st; hand= nextHand}
          
-        
-             
-    // '(<x-coordinate> <y-coordinate> <piece id><character><point-value> )
-    (*HEURISTIC*)
-    (*let bestMove (st : state) =
-        let board = st.board
-        let hand = st.hand
-        let dict = st.dict
-        let placedTiles = st.placedTiles
-        
-        
-        let coords = List.ofSeq placedTiles.Keys
-        
-        let auxCheckedCoords = List.empty
-        
-        
-        let rec aux (c:coord) (v:(char*int)) =
-            if List.contains c auxCheckedCoords
-            then coords = coords.Tail
-            else
-            
-            let dirClear = getDirectionClear c st
-            match dirClear with
-                |Neither ->
-                    c::auxCheckedCoords
-                    coords = coords.tail
-                    aux coords.Head placedTiles[coords.Head]
-                |Both -> dunno
-                |Top ->
-                    let bka = step 'c' dict
-                    *)

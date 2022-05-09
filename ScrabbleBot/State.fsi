@@ -13,7 +13,7 @@ module internal State =
             playerNumber  : uint32
             playerTurn    : uint32
             hand          : MultiSet.MultiSet<uint32>
-            placedTiles    : Map<Eval.coord,(uint*(char*int))>
+            placedTiles    : Map<coord,(uint*(char*int))>
             horizontalPrefixes : Map<coord,((int * int) * (uint * (char * int))) list>
             verticalPrefixes : Map<coord,((int * int) * (uint * (char * int))) list>
             tiles : Map<uint32, ScrabbleUtil.tile>
@@ -30,7 +30,7 @@ module internal State =
     val playerNumber    : state -> uint32
     val playerTurn      : state -> uint32
     val hand            : state -> MultiSet.MultiSet<uint32>
-    val placedTiles      : state -> Map<Eval.coord,(uint*(char*int))>
+    val placedTiles      : state -> Map<coord,(uint*(char*int))>
     val horizontalPrefixes : state -> Map<coord,((int * int) * (uint * (char * int))) list>
     val verticalPrefixes : state -> Map<coord,((int * int) * (uint * (char * int))) list> 
     val tiles : state -> Map<uint32, ScrabbleUtil.tile>

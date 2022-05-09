@@ -46,7 +46,7 @@ let main argv =
 
     let dictAPI =
         // Uncomment if you have implemented a dictionary. last element None if you have not implemented a GADDAG
-        Some (Dictionary.empty, Dictionary.insert, Dictionary.step, None (*Some Dictionary.reverse*))
+        Some (Dictionary.empty, Dictionary.insert, Dictionary.step, None (*Some Dictionary.reverse*)) 
         
 
     

@@ -86,23 +86,24 @@ let findPlayableTiles (hand:MultiSet.MultiSet<uint32>) (dict:Dict) (placedTiles:
     //Step with word/chars already on the board as prefix.
     
     //Find word from tiles in hand
-    let rec aux (hand:MultiSet.MultiSet<uint32>) (dict:Dict) (move:(coord * (uint32 * (char * int))) list) (tiles:Map<uint,tile>) (x,y) = 
+    let rec aux (hand:MultiSet.MultiSet<uint32>) (dict:Dict) (move:((coord * (uint32 * (char * int))) list)) (moveList:((coord * (uint32 * (char * int))) list)list) (tiles:Map<uint,tile>) (x,y) = 
         //Translate hand to tiles
         MultiSet.fold(
             fun acc letterIndex _  ->
                 let tile = Map.find letterIndex tiles //
                 //Fold to check all if wildcard instance. Otherwise this will only run once
+                //Move should prob be reversed
                 Set.fold (
-                    fun acc' elem -> 
+                    fun _ elem -> 
                         let placement = ((x,y),(letterIndex, elem))
                         match step (fst elem) dict, (isEmpty placedTiles (x,y)) with
-                        | _, false -> []
-                        | None, _ -> [] //No move
-                        | Some(false, dic), _ -> aux (MultiSet.removeSingle letterIndex hand) dic (placement::acc') tiles (incrementCoord isHorizontal (x, y) )
-                        | Some(true, _), _ -> (placement::acc')
+                        | _, false -> acc
+                        | None, _ -> acc //No move
+                        | Some(false, dic), _ -> aux (MultiSet.removeSingle letterIndex hand) dic (placement::move) acc tiles (incrementCoord isHorizontal (x, y) )
+                        | Some(true, _), _ -> (placement::move)::acc
                 ) acc tile
-        )move hand
-    aux hand dict [] tiles startCoord
+        )moveList hand
+    aux hand dict [] [[]] tiles startCoord
 
 
 let rec findMove hand dict placedTiles tiles (prefixList:List<coord * list<(int * int) * (uint * (char * int))>>) isHorizontal =
@@ -114,6 +115,7 @@ let rec findMove hand dict placedTiles tiles (prefixList:List<coord * list<(int 
         | [] -> findMove hand dict placedTiles tiles t isHorizontal
         | _ -> move
         
+//let bestMove 
 
 let generateAction (st:state) = 
     if Map.isEmpty st.placedTiles
@@ -121,7 +123,7 @@ let generateAction (st:state) =
         let centerMove = findPlayableTiles st.hand st.dict Map.empty st.tiles true (0,0)
         match centerMove.Length with
         |0 -> [] //pass
-        |_ ->   [] //play move
+        |_ ->  [] //play move
     else //find move
         let verticalPrefixList = Map.toList st.verticalPrefixes
         let horizontalPrefixList = Map.toList st.horizontalPrefixes
