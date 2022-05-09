@@ -21,7 +21,7 @@ let isValidMove (move: (coord * (uint32 * (char * int))) list) (placedTiles: Map
         |> List.fold (fun acc x -> (isEmpty placedTiles (fst x)::acc)) []
         |> List.contains false
 
-type directionClear =
+(* type directionClear =
         |Top
         |Left
         |Both
@@ -34,9 +34,9 @@ let directionClear (c:coord) (st:state) direction =
             |_ -> false
     | Left -> match Map.tryFind (fst(c)-1,snd(c)) st.placedTiles with
             |None -> true
-            |_ -> false
+            |_ -> false *)
         
-let getDirectionClear (c:coord) (st:state) :directionClear =
+(* let getDirectionClear (c:coord) (st:state) :directionClear =
     let topClear =  Map.containsKey (fst(c),snd(c)+1) st.placedTiles
     let leftClear = Map.containsKey (fst(c)+1,snd(c)) st.placedTiles
     match topClear,leftClear with
@@ -44,17 +44,18 @@ let getDirectionClear (c:coord) (st:state) :directionClear =
     |false, false -> Neither
     |true, false -> Top
     |false, true  -> Left
+     *)
     
+let prefixDict (dict:Dict) (prefixChars:coord * list<(int * int) * (uint * (char * int))>) = 
     
-let prefixDict (dict:Dict) (prefixChars:Map<coord,uint*(char*int)>) = 
-    Map.fold (
-        fun acc (a:coord) ((b:uint),c ) ->
-         match (Dictionary.step (fst c) acc) with
-         | None -> failwith "Invalid boardChars" //Should never
-         | Some(_, dic) -> dic
-       ) dict prefixChars
+    List.fold (
+        fun acc ((_,_), (_, (c,_))) -> //(firstCharCoord:coord) (letterCoord:(int*int)) ((letterId:uint), c) 
+            match (Dictionary.step c acc) with
+            | None -> failwith "Invalid boardChars" //Should never
+            | Some(_, dic) -> dic
+       ) dict (snd prefixChars)
 
-let rec suffixCheck (dict:Dict) (suffixChars:Map<coord,char*int>) (move:List<uint*(char*int)>) =
+(* let rec suffixCheck (dict:Dict) (suffixChars:Map<coord,((int * int) * (uint * (char * int))) list>) (move:List<uint*(char*int)>) =
     Map.fold (
         fun acc (a:coord) b  ->
          //TODO add uint id
@@ -63,88 +64,70 @@ let rec suffixCheck (dict:Dict) (suffixChars:Map<coord,char*int>) (move:List<uin
          | None -> []
          | Some(false, dic) -> suffixCheck dic ((Map.remove a) suffixChars) (placement::move)
          | Some(true, _) -> (placement::move)
-       ) [] suffixChars
+       ) [] suffixChars *)
 
-let incrementCoord x y = 
-    function
+
+let incrementCoord isHorizontal (x,y) = 
+    match isHorizontal with
     | true -> x+1, y
     | false -> x, y+1
 
-let getStartCoord x y (prefixChars:List<coord*uint*(char*int)>) isHorizontal = 
-    fst(List.last prefixChars)
+let getCoord ((x,y), (ui,(c,i)))= x,y
+
+let getStartCoord (prefixChars:coord * list<(int * int) * (uint * (char * int))>) isHorizontal = 
+    prefixChars 
+    |> snd 
+    |> List.last 
+    |> getCoord
+    |> incrementCoord isHorizontal
 
 
-let findPlayableTiles (hand:MultiSet.MultiSet<uint32>) (dict:Dict) (placedTiles:Map<coord,uint*(char*int)>) (tiles:List<tile*uint>) (isHorizontal:bool) (startCoord:coord) =
+let findPlayableTiles (hand:MultiSet.MultiSet<uint32>) (dict:Dict) (placedTiles:Map<coord,uint*(char*int)>) (tiles:Map<uint,tile>) (isHorizontal:bool) (startCoord:coord) =
     //Step with word/chars already on the board as prefix.
     
     //Find word from tiles in hand
-    let rec aux (hand:MultiSet.MultiSet<uint32>) (dict:Dict) (move:(coord * (uint32 * (char * int))) list) (tiles:Map<uint32, tile>) (x,y) = 
+    let rec aux (hand:MultiSet.MultiSet<uint32>) (dict:Dict) (move:(coord * (uint32 * (char * int))) list) (tiles:Map<uint,tile>) (x,y) = 
         //Translate hand to tiles
         MultiSet.fold(
             fun acc letterIndex _  ->
-            let tile = tiles.Item letterIndex
-            //Fold to check all if wildcard instance. Otherwise this will only run once
-            Set.fold (
-                fun acc' elem -> 
-                    let placement = ((x,y),(letterIndex, elem))
-                    match step (fst elem) dict, (isEmpty placedTiles (x,y)) with
-                    | _, false -> []
-                    | None, _ -> [] //No move
-                    | Some(false, dic), _ -> aux (MultiSet.removeSingle letterIndex hand) dic (placement::acc') tiles (incrementCoord x y isHorizontal)
-                    | Some(true, _), _ -> (placement::acc')
+                let tile = Map.find letterIndex tiles //
+                //Fold to check all if wildcard instance. Otherwise this will only run once
+                Set.fold (
+                    fun acc' elem -> 
+                        let placement = ((x,y),(letterIndex, elem))
+                        match step (fst elem) dict, (isEmpty placedTiles (x,y)) with
+                        | _, false -> []
+                        | None, _ -> [] //No move
+                        | Some(false, dic), _ -> aux (MultiSet.removeSingle letterIndex hand) dic (placement::acc') tiles (incrementCoord isHorizontal (x, y) )
+                        | Some(true, _), _ -> (placement::acc')
                 ) acc tile
-            )move hand
+        )move hand
     aux hand dict [] tiles startCoord
 
 
-    
-let generateAction (st:state) prefixChars:(coord * (uint32 * (char * int))) list = 
+let rec findMove hand dict placedTiles tiles (prefixList:List<coord * list<(int * int) * (uint * (char * int))>>) isHorizontal =
+    match prefixList with
+    | [] -> []
+    | prefix::t -> 
+        let move = findPlayableTiles hand (prefixDict dict prefix) placedTiles tiles isHorizontal (getStartCoord prefix isHorizontal)
+        match move with 
+        | [] -> findMove hand dict placedTiles tiles t isHorizontal
+        | _ -> move
+
+
+
+let generateAction (st:state) = 
     //if Map.isEmpty st.placedTiles then findPlayableTiles st.hand startCoord (0,0) true else 
-    let rec aux acc=
-        Map.fold ( fun x coord tile ->
-            match getDirectionClear coord st with
-            |Both -> 
-                let verticalWord = findPlayableTiles st.hand (prefixDict st.dict prefixChars) st.placedTiles (ScrabbleUtil.English.tiles 1u) false (getStartCoord fst(coord) snd(coord))
-                let horizontalWord = findPlayableTiles st.hand (prefixDict st.dict prefixChars) st.placedTiles (ScrabbleUtil.English.tiles 1u) true getStartCoord
-                match verticalWord.Length , horizontalWord.Length with
-                |0,0 -> []//change pieces?
-                |0,_ -> horizontalWord
-                |_,0 -> verticalWord
-                |x,y -> if x >=y then verticalWord else horizontalWord 
-            |Neither -> []
-            |Top ->findPlayableTiles st.hand (prefixDict dict prefixChars)  st.placedTile false getStartCoord  
-            |Left -> findPlayableTiles st.hand (prefixDict dict prefixChars) st.placedTiles true getStartCoord
-                
-        ) [] st.placedWords
+    let verticalPrefixList = Map.toList st.verticalPrefixes
+    let horizontalPrefixList = Map.toList st.horizontalPrefixes
 
-        
-    if Map.isEmpty st.placedTiles then findPlayableTiles st.hand startCoord (0,0) true else 
-    aux []
+    let verticalMove = findMove st.hand st.dict st.placedTiles st.tiles verticalPrefixList false
+    let horizontalMove = findMove st.hand st.dict st.placedTiles st.tiles horizontalPrefixList true 
 
-// '(<x-coordinate> <y-coordinate> <piece id><character><point-value> )
-    (*HEURISTIC*)
-(*let bestMove (st : state) =
-    let board = st.board
-    let hand = st.hand
-    let dict = st.dict
-    let placedTiles = st.placedTiles
-    
-    
-    let coords = List.ofSeq placedTiles.Keys
-    
-    let auxCheckedCoords = List.empty*)
+    match verticalMove.Length, horizontalMove.Length  with 
+    |0,0 -> []//change pieces?
+    |0,_ -> horizontalMove
+    |_,0 -> verticalMove
+    |x,y -> if x >=y then verticalMove else horizontalMove
 
-    (*let rec aux (c:coord) (v:(char*int)) =
-        if List.contains c auxCheckedCoords
-        then coords = coords.Tail
-        else
-        
-        let dirClear = getDirectionClear c st
-        match dirClear with
-            |Neither ->
-                c::auxCheckedCoords
-                coords = coords.tail
-                aux coords.Head placedTiles[coords.Head]
-            |Both -> dunno
-            |Top ->
-                    let bka = step 'c' dict*)
+    //if Map.isEmpty st.placedTiles then findPlayableTiles st.hand startCoord (0,0) true else 

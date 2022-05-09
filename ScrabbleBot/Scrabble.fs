@@ -50,6 +50,11 @@ module RegEx =
     let printHand pieces hand =
         hand |>
         MultiSet.fold (fun _ x i -> forcePrint (sprintf "%d -> (%A, %d)\n" x (Map.find x pieces) i)) ()
+    let printPrefixes (prefixes: Map<coord,((int * int) * (uint * (char * int))) list>) = 
+        prefixes |>
+        Map.fold (fun _ x i -> 
+            i |>
+            List.fold (fun _ (coord, (ui)) -> forcePrint (sprintf "(%d,%d) -> (%A)\n" (Coord.getX x) (Coord.getY x) ui )) ()) ()
 
 module ManualPlay =
     let handToIdList hand = hand |> MultiSet.fold (fun acc x _ -> x::acc ) []
@@ -82,6 +87,7 @@ module Scrabble =
 
         let rec aux (st : State.state) =
             Print.printHand pieces (State.hand st)
+            Print.printPrefixes st.horizontalPrefixes
                    
             // remove the force print when you move on from manual input (or when you have learnt the format)
             forcePrint "Input move (format '(<x-coordinate> <y-coordinate> <piece id><character><point-value> )*', note the absence of space between the last inputs)\n\n"
@@ -101,7 +107,6 @@ module Scrabble =
 
             let msg = recv cstream
             //debugPrint (sprintf "Player %d <- Server:\n%A\n" (State.playerNumber st) move) // keep the debug lines. They are useful.
-
             match msg with
             | RCM (CMPlaySuccess(ms, points, newPieces)) ->
                 (* Successful play by you. Update your state (remove old tiles, add the new ones, change turn, etc) *)
@@ -179,7 +184,7 @@ module Scrabble =
             Map.map(fun _ value -> Parser.parseSquareProg value) boardP.squares
             |> Parser.parseBoardProg boardP.prog
         
-        fun () -> playGame cstream tiles (State.mkState board dict numPlayers playerNumber playerTurn  handSet forfeitedPlayers boardTiles Map.empty Map.empty)
+        fun () -> playGame cstream tiles (State.mkState board dict numPlayers playerNumber playerTurn  handSet forfeitedPlayers boardTiles Map.empty Map.empty tiles)
 
 
         

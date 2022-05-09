@@ -18,13 +18,14 @@ module internal State =
         placedTiles    : Map<coord,(uint*(char*int))>
         horizontalPrefixes : Map<coord,((int * int) * (uint * (char * int))) list>
         verticalPrefixes : Map<coord,((int * int) * (uint * (char * int))) list>
+        tiles : Map<uint32, tile>
 
         //number of players (så vi bl.a ved at hvis en forfeiter, og de kun er 2, så har den anden vundet.
         //player turn
         //hvordan holdes der styr på point? - det gør serveren.
     }
 
-    let mkState b d np pn pt h g bT hp vp= 
+    let mkState b d np pn pt h g bT hp vp tl= 
         {board = b; 
         dict = d; 
         numberOfPlayers = np; 
@@ -33,7 +34,8 @@ module internal State =
         playerTurn = pt; hand = h; 
         placedTiles = bT;
         horizontalPrefixes = hp;
-        verticalPrefixes = vp}
+        verticalPrefixes = vp;
+        tiles  = tl}
     let board st         = st.board
     let dict st          = st.dict
     let playerNumber st  = st.playerNumber
@@ -44,6 +46,7 @@ module internal State =
     let placedTiles st = st.placedTiles
     let horizontalPrefixes st = st.horizontalPrefixes
     let verticalPrefixes st = st.horizontalPrefixes
+    let tiles st = st.tiles
     
     // move: ((int * int) * (uint32 * (char * int))) list
     //helper methods
@@ -61,9 +64,12 @@ module internal State =
         | false -> findStartIndexVertical (x,y-1) st
         | true -> coord(x,y)
 
-    let addOpposite (x,y) (st:state) (ms:((int * int) * (uint * (char * int))) list) = 
+    let addOpposite (x,y) (st:state) (ms:((int * int) * (uint * (char * int))) list) isHorizontal = 
         List.fold (fun acc ((x,y),(_)) -> 
-                match Map.containsKey (x,y-1) st.placedTiles with
+                let coordDecrement =
+                    if isHorizontal then (x-1,y)
+                    else (x,y-1)
+                match Map.containsKey coordDecrement st.placedTiles with
                 | false -> Map.add (x,y) ms st.verticalPrefixes
                 | true -> 
                     let startCord = findStartIndexVertical (x,y) st
@@ -71,12 +77,12 @@ module internal State =
                     let newMap = st.verticalPrefixes.Remove (startCord)
                     Map.add (startCord) (List.append oldPrefix ms)newMap) Map.empty ms
                 
-    let addHorizontal (x,y) (st:state) (ms:((int * int) * (uint * (char * int))) list) = 
+    let addHorizontalPrefix (x,y) (st:state) (ms:((int * int) * (uint * (char * int))) list)  = 
         match Map.containsKey (x-1,y) st.placedTiles with
         | false -> 
             //This move is a new prefix
             let newHorizontal = Map.add (x,y) ms st.horizontalPrefixes
-            let newVertical = addOpposite (x,y) st ms
+            let newVertical = addOpposite (x,y) st ms false
             newHorizontal,newVertical
         | true ->
             //This move is an extension of a prefix
@@ -84,19 +90,31 @@ module internal State =
             let oldPrefix = Map.find (startCord) st.horizontalPrefixes
             let newMap = st.horizontalPrefixes.Remove startCord
             let newHorizontal = Map.add startCord (List.append oldPrefix ms) newMap
-            newHorizontal, addOpposite (x,y) st ms
+            let newVertical = addOpposite (x,y) st ms false
+            newHorizontal, newVertical
+    
+    let addVerticalPrefix (x,y) (st:state) (ms:((int * int) * (uint * (char * int))) list)  = 
+        match Map.containsKey (x,y-1) st.placedTiles with
+        | false -> 
+            //This move is a new prefix
+            let newVertical = Map.add (x,y) ms st.verticalPrefixes
+            let newHorizontal = addOpposite (x,y) st ms true
+            newHorizontal, newVertical
+        | true ->
+            //This move is an extension of a prefix
+            let startCord = findStartIndexVertical (x,y) st
+            let oldPrefix = Map.find (startCord) st.verticalPrefixes
+            let newMap = st.verticalPrefixes.Remove startCord
+            let newVertical = Map.add startCord (List.append oldPrefix ms) newMap
+            let newHorizontal = addOpposite (x,y) st ms true
+            newHorizontal, newVertical
 
-
-    let addMoveAsPrefix (startCoord:coord) (st:state) (ms:((int * int) * (uint * (char * int))) list) = 
+    let addPrefix (startCoord:coord) (st:state) (ms:((int * int) * (uint * (char * int))) list) = 
         match isHorizontal ms with
         |true -> 
-            let currentWord = st.horizontalPrefixes[startCoord]
-            st.horizontalPrefixes[startCoord] = currentWord @ ms
-            st.horizontalPrefixes
+            addHorizontalPrefix (Coord.getX startCoord, Coord.getY startCoord) st ms
         |false ->
-            let currentWord = st.verticalPrefixes[startCoord]
-            st.verticalPrefixes[startCoord] = currentWord @ ms
-            st.verticalPrefixes
+            addVerticalPrefix (Coord.getX startCoord, Coord.getY startCoord) st ms
      
     let getWordAndCoordFromMoveHorizontol moveList placedWords =
         List.fold (fun acc (x,k) -> Map.add (coord(x), moveList))
@@ -140,11 +158,22 @@ module internal State =
                 let currentHand = removeFromHandSet usedTileIds st.hand  
                 let nextHand = addToHandSet newPieces currentHand      
                 let newBoardTiles = getCoordAndTileFromMove ms st.placedTiles
-                {st with playerTurn = changePlayerTurn st; hand= nextHand; placedTiles=newBoardTiles}
+                let prefixStartCoord = ms.Head |> fst
+                let newPrefixes = addPrefix prefixStartCoord st ms
+                {st with 
+                    playerTurn = changePlayerTurn st; 
+                    hand= nextHand; placedTiles=newBoardTiles; 
+                    horizontalPrefixes = newPrefixes |> fst; 
+                    verticalPrefixes = newPrefixes|>snd}
     
     let updateStatePlayed st pid ms points =
         let newBoardTiles = getCoordAndTileFromMove ms st.placedTiles
-        {st with playerNumber=changePlayerTurn st; placedTiles=newBoardTiles }
+        let newPrefixes = addPrefix (fst ms.Head) st ms
+        {st with 
+            playerNumber=changePlayerTurn st; 
+            placedTiles=newBoardTiles; 
+            horizontalPrefixes = newPrefixes |> fst; 
+            verticalPrefixes = newPrefixes|>snd }
     
     let  updateStatePlayerPassed st =
         {st with playerTurn = changePlayerTurn st}
