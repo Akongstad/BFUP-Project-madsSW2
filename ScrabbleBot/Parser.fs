@@ -9,7 +9,7 @@ module internal Parser
     open ScrabbleUtil // NEW. KEEP THIS LINE.
     open Eval
     open System
-    open FParsecLight.TextParser     // Industrial parser-combinator library. Use for Scrabble Project.
+    open FParsecLight.TextParser    // Industrial parser-combinator library. Use for Scrabble Project.
     
     
     type squareFun = word -> int -> int -> Result<int, Error>
@@ -183,7 +183,8 @@ module internal Parser
 (* These five types will move out of this file once you start working on the project *)
     type word   = (char * int) list
     type square = Map<int, squareFun>
-    let parseSquareProg (sqp:squareProg) = Map.map (fun _ value -> (run stmntParse value) |> getSuccess |> stmntToSquareFun) sqp
+    let parseSquareProg (sqp:squareProg) = 
+        Map.map (fun _ value -> (run stmntParse value) |> getSuccess |> stmntToSquareFun) sqp
 
     type boardFun2 = coord -> StateMonad.Result<square option, StateMonad.Error>
     type board = {

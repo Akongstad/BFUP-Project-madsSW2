@@ -86,18 +86,18 @@ module Scrabble =
             // remove the force print when you move on from manual input (or when you have learnt the format)
             forcePrint "Input move (format '(<x-coordinate> <y-coordinate> <piece id><character><point-value> )*', note the absence of space between the last inputs)\n\n"
             
-            let input = System.Console.ReadLine()
+            (* let input = System.Console.ReadLine()
             //For playing manually:
-            ManualPlay.parsePlayerMove cstream st input
+            ManualPlay.parsePlayerMove cstream st input *)
             
             //FOR Playing with bot
-            (*match (st.playerTurn = st.playerNumber ) with
+            match (st.playerTurn = st.playerNumber ) with
             | true -> 
                 let move = generateAction st
                 match List.length move with
                 | 0 -> send cstream SMPass
                 | _ -> send cstream (SMPlay move )
-            | _ -> failwith "How do we wait?"*)
+            | _ -> failwith "How do we wait?"
 
             let msg = recv cstream
             //debugPrint (sprintf "Player %d <- Server:\n%A\n" (State.playerNumber st) move) // keep the debug lines. They are useful.
@@ -175,11 +175,11 @@ module Scrabble =
         
         let boardTiles = Map.empty
         //TODO Save this in state. For checking whether a square is a hole and calculating points 
-        let boardProg =
+        let boardFun =
             Map.map(fun _ value -> Parser.parseSquareProg value) boardP.squares
             |> Parser.parseBoardProg boardP.prog
         
-        fun () -> playGame cstream tiles (State.mkState board dict numPlayers playerNumber playerTurn  handSet forfeitedPlayers boardTiles)
+        fun () -> playGame cstream tiles (State.mkState board dict numPlayers playerNumber playerTurn  handSet forfeitedPlayers boardTiles Map.empty Map.empty)
 
 
         
