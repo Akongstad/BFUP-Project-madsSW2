@@ -1,9 +1,8 @@
 ﻿namespace madsSW2
-
+open ScrabbleUtil
+open System.IO
+open Parser
 module Scrabble =
-
-    open ScrabbleUtil
-    open System.IO
 
     val startGame :
         boardProg ->                 (* Scrabble board *)

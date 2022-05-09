@@ -186,11 +186,11 @@ module internal Parser
     let parseSquareProg (sqp:squareProg) = Map.map (fun _ value -> (run stmntParse value) |> getSuccess |> stmntToSquareFun) sqp
 
     type boardFun2 = coord -> StateMonad.Result<square option, StateMonad.Error>
-        type board = {
-            center        : coord
-            defaultSquare : square
-            squares       : boardFun2
-        }
+    type board = {
+        center        : coord
+        defaultSquare : square
+        squares       : boardFun2
+    }
     let parseBoardProg (s:string) (sqs:Map<int, square>) :boardFun2 = stmntToBoardFun (run stmntParse s |> getSuccess) sqs
         
 

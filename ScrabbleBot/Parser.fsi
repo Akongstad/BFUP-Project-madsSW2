@@ -18,3 +18,5 @@ module internal Parser
     }
 
     val mkBoard : boardProg -> board
+    val parseBoardProg : string -> Map<int,square> -> boardFun2
+    val parseSquareProg: squareProg -> Map<int,squareFun>
