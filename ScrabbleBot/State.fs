@@ -186,17 +186,25 @@ module internal State =
     
     let updateStatePlaySuccess st ms points newPieces =
                 let usedTileIds = getUsedTileIdFromMove ms
+                ScrabbleUtil.DebugPrint.forcePrint $"Got Used Tile ids: %A{usedTileIds}\n"
                 
+                ScrabbleUtil.DebugPrint.forcePrint $"Removing from hand\n" 
                 let currentHand = removeFromHandSet usedTileIds st.hand  
-
+                
+                ScrabbleUtil.DebugPrint.forcePrint $"Adding new pieces to hand: %A{newPieces}\n" 
                 let nextHand = addToHandSet newPieces currentHand      
 
+                ScrabbleUtil.DebugPrint.forcePrint $"Adding new tile to the board. Old board: %A{st.placedTiles}\n" 
                 let newBoardTiles = getCoordAndTileFromMove ms st.placedTiles
+                ScrabbleUtil.DebugPrint.forcePrint $"new board: %A{newBoardTiles}\n" 
 
+                ScrabbleUtil.DebugPrint.forcePrint $"Finding startcoord for prefix\n" 
                 let prefixStartCoord = ms.Head |> fst
 
+                ScrabbleUtil.DebugPrint.forcePrint $"Adding new prefix\n" 
                 let newPrefixes = addPrefix prefixStartCoord st ms
 
+                ScrabbleUtil.DebugPrint.forcePrint $"Saving state\n" 
                 {st with 
                     playerTurn = changePlayerTurn st; 
                     hand= nextHand;
