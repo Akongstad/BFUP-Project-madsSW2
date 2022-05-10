@@ -53,10 +53,20 @@ module RegEx =
     
     let printPrefixes (prefixes: Map<coord,((int * int) * (uint * (char * int))) list>) = 
         prefixes |>
-        Map.fold (fun _ x i -> forcePrint (sprintf "%A -> (%A)\n" x i)) ()
+        Map.fold (fun _ x i -> 
+                forcePrint(sprintf $"%A{x}")
+                List.fold (fun _ ((x,y),(ui,(c,i))) -> forcePrint(sprintf $"%c{c}" )) () i
+                forcePrint $"\n"
+                ) () 
 
 module ManualPlay =
-    let handToIdList hand = hand |> MultiSet.fold (fun acc x _ -> x::acc ) []
+    let rec appendTiles n x acc = 
+        match n with
+        |0u -> acc
+        |_ ->
+            forcePrint $"%A{acc}" 
+            appendTiles (n-1u) x (x::acc)
+    let handToIdList hand = hand |> MultiSet.fold (fun acc x n -> appendTiles n x acc ) []
     let parsePlayerAction cstream st (input:string) =
         let action = input.Substring(0, 2)
         match action with
@@ -89,27 +99,28 @@ module Scrabble =
             
             forcePrint $"Horizontal:  "
             Print.printPrefixes st.horizontalPrefixes
-            
+            forcePrint $"\n"
             forcePrint $"Vertical:  "
             Print.printPrefixes st.verticalPrefixes
+            forcePrint $"\n"
+
+            debugPrint $"Turn = %d{st.playerTurn} %d{st.playerNumber}\n0 "
+            debugPrint "Input move (format '(<x-coordinate> <y-coordinate> <piece id><character><point-value> )*', note the absence of space between the last inputs)\n\n"
             
-            forcePrint $"Turn = %d{st.playerTurn} %d{st.playerNumber}\n0 "
-            forcePrint "Input move (format '(<x-coordinate> <y-coordinate> <piece id><character><point-value> )*', note the absence of space between the last inputs)\n\n"
-            
-            let input = System.Console.ReadLine()
+            (* let input = System.Console.ReadLine()
             //For playing manually:
             let move = RegEx.parseMove (input)
             debugPrint (sprintf "Player %d -> Server:\n%A\n" (State.playerNumber st) move)
-            send cstream (SMPlay move)
+            send cstream (SMPlay move) *)
 
             //FOR Playing with bot
-           (*  match (st.playerTurn = st.playerNumber ) with
+            match (st.playerTurn = st.playerNumber ) with
             | true -> 
                 let move = generateAction st
                 match List.length move with
-                | 0 -> send cstream SMChange
+                | 0 -> send cstream (SMChange (ManualPlay.handToIdList st.hand))
                 | _ -> send cstream (SMPlay move )
-            | _ -> failwith "How do we wait?" *)
+            | false -> ()
             
             //debugPrint (sprintf "Player %d <- Server:\n%A\n" (State.playerNumber st) move)
             
@@ -153,6 +164,11 @@ module Scrabble =
                 printf("Game over Final score:")
                 finalSCore |>
                 List.fold (fun _ (id,score) -> printf($"Player: %d{id} -- Score: %d{score}\n")) ()
+            | RCM (CMTimeout time) -> 
+                printf($"Timeout %d{time}")
+                let st' = updateStatePlayerPassed st
+                aux st'
+                //Cancel asyncs
             | RCM a -> failwith (sprintf "not implmented: %A" a)
             | RGPE err ->
                 printfn "Gameplay Error:\n%A" err
@@ -169,7 +185,7 @@ module Scrabble =
             (tiles : Map<uint32, tile>)
             (timeout : uint32 option) 
             (cstream : Stream) =
-        forcePrint 
+        debugPrint 
             $"Starting game!
                       number of players = %d{numPlayers}
                       player id = %d{playerNumber}

@@ -25,8 +25,8 @@ let main argv =
     Console.Clear()
 
 
-    let board        = ScrabbleUtil.StandardBoard.standardBoard ()
-//    let board      = ScrabbleUtil.InfiniteBoard.infiniteBoard ()
+//    let board        = ScrabbleUtil.StandardBoard.standardBoard ()
+    let board      = ScrabbleUtil.InfiniteBoard.infiniteBoard ()
 
 //    let board      = ScrabbleUtil.RandomBoard.randomBoard ()
 //    let board      = ScrabbleUtil.RandomBoard.randomBoardSeed (Some 42)
@@ -39,7 +39,7 @@ let main argv =
     let words     = readLines "./Dictionaries/English.txt"
 
     let handSize   = 7u
-    let timeout    = None
+    let timeout    = Some(15000u)
     let tiles      = ScrabbleUtil.English.tiles 1u
     let seed       = None
     let port       = 13001
@@ -55,7 +55,13 @@ let main argv =
     let dictionary, time =
         time (fun () -> ScrabbleUtil.Dictionary.mkDict words dictAPI)
         
-    let players    =  spawnMultiples "mads" dictionary madsSW2.Scrabble.startGame 1    // [("mads", madsSW2.Scrabble.startGame)]
+    //let madsdrengen  =  spawnMultiples "mads" dictionary madsSW2.Scrabble.startGame 1 
+//    let oxydrengen = spawnMultiples "Oxy" dictionary  Oxyphenbutazone.Scrabble.startGame 1
+
+    let players  =  spawnMultiples "mads" dictionary madsSW2.Scrabble.startGame 1 
+    //let players = madsdrengen @ oxydrengen   
+      // [("mads", madsSW2.Scrabble.startGame)]
+    //let players = [("mads",dictionary ,madsSW2.Scrabble.startGame), ("oxyfjæs", dictionary, Oxyphenbutazone.Scrabble.startGame)]
     //let players = spawnMultiples "OxyphenButazone" dictionary Oxyphenbutazone.Scrabble.startGame 4
 
     //Test dictionary implementation. isEmpty == true means passed

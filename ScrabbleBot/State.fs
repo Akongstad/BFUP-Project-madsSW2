@@ -51,28 +51,30 @@ module internal State =
     // move: ((int * int) * (uint32 * (char * int))) list
     //helper methods
 
-    type directionClear =
-        |Top
-        |Left
+    type extendDirection =
+        |Vertical
+        |Horizontal
         |Both
         |Neither
 
-    let getDirectionClear (c:coord) (st:state) :directionClear =
-        let topClear =  Map.containsKey (fst(c),snd(c)+1) st.placedTiles
-        let leftClear = Map.containsKey (fst(c)+1,snd(c)) st.placedTiles
-        match topClear, leftClear with
-        |true, true -> Both
-        |false, false -> Neither
-        |true, false -> Top
-        |false, true  -> Left
+    let getDirection (c:coord) placedTiles =
+        
+        let extendsHorizontal = Map.containsKey (fst(c)-1,snd(c)) placedTiles
+        let extendsVertical =  Map.containsKey (fst(c),snd(c)-1) placedTiles
+        
+        match extendsHorizontal, extendsVertical with
+        |true, true -> Neither
+        |false, false -> Both
+        |true, false -> Horizontal
+        |false, true  -> Vertical
 
-    let isHorizontal (ms:((int * int) * (uint * (char * int))) list) (st:state) =
+    let isHorizontal (ms:((int * int) * (uint * (char * int))) list) placedTiles =
         if ms.Length = 1 then
-            let directionClear = getDirectionClear (coord(fst(List.head ms))) st
-            match directionClear with
+            let direction = getDirection (coord(fst(List.head ms))) placedTiles
+            match direction with
             |Neither -> failwith "Edge case is both horizontal and vertical prefix"
-            |Top -> true
-            |Left -> false 
+            |Vertical -> false
+            |Horizontal -> true 
             | _ -> failwith "impossible"
         else
             let firstX = (List.head ms |> fst |> fst)
@@ -82,12 +84,16 @@ module internal State =
     let rec findStartIndexHorizontal (x,y) prefixes =
         match Map.containsKey (x,y) prefixes with
         | false -> findStartIndexHorizontal (x-1,y) prefixes
-        | true -> coord(x,y)
+        | true -> 
+            DebugPrint.forcePrint $"findstartIndexHorizontal: %A{coord(x,y)}"
+            coord(x,y)
 
     let rec findStartIndexVertical (x,y) prefixes =
         match Map.containsKey (x,y) prefixes with
         | false -> findStartIndexVertical (x,y-1) prefixes
-        | true -> coord(x,y)
+        | true -> 
+            DebugPrint.forcePrint $"findstartIndexVerical: %A{coord(x,y)}"
+            coord(x,y)
 
     let addOpposite (prefixes) (placedTiles) (ms:((int * int) * (uint * (char * int))) list) isHorizontal = 
         List.fold (fun acc ((x,y),(tile)) -> 
@@ -134,14 +140,15 @@ module internal State =
         | true ->
             //This move is an extension of a prefix
             let startCord = findStartIndexVertical (x,y) st.verticalPrefixes
-            let oldPrefix = Map.find (startCord) st.verticalPrefixes
+            DebugPrint.forcePrint $"StartCoord from find start index%A{startCord}\n"
+            let oldPrefix = Map.find(startCord) st.verticalPrefixes
             let newMap = Map.remove startCord st.verticalPrefixes
-            let newVertical = Map.add startCord (List.append oldPrefix ms) newMap
+            let newVertical = Map.add startCord (oldPrefix @ ms) newMap
             let newHorizontal = addOpposite  st.horizontalPrefixes st.placedTiles ms true
             newHorizontal, newVertical
 
-    let addPrefix (startCoord:coord) (st:state) (ms:((int * int) * (uint * (char * int))) list) = 
-        match isHorizontal ms st with
+    let addPrefix (startCoord:coord) (st:state) (ms:((int * int) * (uint * (char * int))) list) isHorizontal = 
+        match isHorizontal with
         |true -> 
             addHorizontalPrefix (Coord.getX startCoord, Coord.getY startCoord) st ms
         |false ->
@@ -161,6 +168,13 @@ module internal State =
     
     let addToHandSet newTiles hand = 
         List.fold (fun acc (x, k) -> MultiSet.add x k acc) hand newTiles //adds new tiles to the hand
+    
+    let sortMs (ms:((int * int) * (uint * (char * int))) list) isHorizontal  =
+        match isHorizontal with
+        |true -> List.sortBy (fun ((x,_),(_,(_,_))) -> x ) ms
+        |false -> List.sortBy (fun ((_,y),(_,(_,_))) -> y ) ms
+
+        
     
     let changePlayerTurn (st:state) =
                 let rec player pnr =
@@ -185,24 +199,28 @@ module internal State =
     let changeTurn (st:state) = (st.playerTurn % st.numberOfPlayers) + 1u
     
     let updateStatePlaySuccess st ms points newPieces =
-                let usedTileIds = getUsedTileIdFromMove ms
-                ScrabbleUtil.DebugPrint.forcePrint $"Got Used Tile ids: %A{usedTileIds}\n"
+
+                let isHorizontal = isHorizontal ms st.placedTiles
+                let msSorted = sortMs ms isHorizontal
+
+                let usedTileIds = getUsedTileIdFromMove msSorted
+                //ScrabbleUtil.DebugPrint.forcePrint $"Got Used Tile ids: %A{usedTileIds}\n"
                 
-                ScrabbleUtil.DebugPrint.forcePrint $"Removing from hand\n" 
+                //ScrabbleUtil.DebugPrint.forcePrint $"Removing from hand\n" 
                 let currentHand = removeFromHandSet usedTileIds st.hand  
                 
-                ScrabbleUtil.DebugPrint.forcePrint $"Adding new pieces to hand: %A{newPieces}\n" 
+                //ScrabbleUtil.DebugPrint.forcePrint $"Adding new pieces to hand: %A{newPieces}\n" 
                 let nextHand = addToHandSet newPieces currentHand      
 
-                ScrabbleUtil.DebugPrint.forcePrint $"Adding new tile to the board. Old board: %A{st.placedTiles}\n" 
-                let newBoardTiles = getCoordAndTileFromMove ms st.placedTiles
-                ScrabbleUtil.DebugPrint.forcePrint $"new board: %A{newBoardTiles}\n" 
+                //ScrabbleUtil.DebugPrint.forcePrint $"Adding new tile to the board. Old board: %A{st.placedTiles}\n" 
+                let newBoardTiles = getCoordAndTileFromMove msSorted st.placedTiles
+                //ScrabbleUtil.DebugPrint.forcePrint $"new board: %A{newBoardTiles}\n" 
 
-                ScrabbleUtil.DebugPrint.forcePrint $"Finding startcoord for prefix\n" 
+                //ScrabbleUtil.DebugPrint.forcePrint $"Finding startcoord for prefix\n" 
                 let prefixStartCoord = ms.Head |> fst
-
+                ScrabbleUtil.DebugPrint.forcePrint $"ms: %A{ms}\n" 
                 ScrabbleUtil.DebugPrint.forcePrint $"Adding new prefix\n" 
-                let newPrefixes = addPrefix prefixStartCoord st ms
+                let newPrefixes = addPrefix prefixStartCoord st msSorted isHorizontal
 
                 ScrabbleUtil.DebugPrint.forcePrint $"Saving state\n" 
                 {st with 
@@ -211,11 +229,15 @@ module internal State =
                     placedTiles=newBoardTiles;
                     horizontalPrefixes = newPrefixes |> fst; 
                     verticalPrefixes = newPrefixes |> snd}
-                    
+            
+                        
     
     let updateStatePlayed st pid ms points =
-        let newBoardTiles = getCoordAndTileFromMove ms st.placedTiles
-        let newPrefixes = addPrefix (fst ms.Head) st ms
+        let isHorizontal = isHorizontal ms st.placedTiles
+        let msSorted = sortMs ms isHorizontal
+
+        let newBoardTiles = getCoordAndTileFromMove msSorted st.placedTiles
+        let newPrefixes = addPrefix (fst msSorted.Head) st msSorted isHorizontal
         {st with 
             playerNumber=changePlayerTurn st; 
             placedTiles = newBoardTiles;
