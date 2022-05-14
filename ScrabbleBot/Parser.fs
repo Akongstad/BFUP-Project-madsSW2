@@ -183,6 +183,7 @@ module internal Parser
 (* These five types will move out of this file once you start working on the project *)
     type word   = (char * int) list
     type square = Map<int, squareFun>
+    
     let parseSquareProg (sqp:squareProg) = 
         Map.map (fun _ value -> (run stmntParse value) |> getSuccess |> stmntToSquareFun) sqp
 
@@ -195,13 +196,23 @@ module internal Parser
         defaultSquare : square
         squares       : boardFun2
     }
-    let parseBoardProg (s:string) (sqs:Map<int, square>) :boardFun2 = stmntToBoardFun (run stmntParse s |> getSuccess) sqs
+    let parseBoardProg (s:string) (sqs:Map<int, square>) :boardFun2 =
+        stmntToBoardFun (run stmntParse s |> getSuccess) sqs
         
 
     let mkBoard (bp : boardProg) :board =
-        let m' = Map.map (fun _ -> parseSquareProg) bp.squares
+        let m' = Map.map (fun _ sP-> parseSquareProg sP) bp.squares
         {
         center = bp.center;
         defaultSquare = Map.find bp.usedSquare m';
         squares = parseBoardProg bp.prog m';
-    }
+        }
+
+
+(* 
+    let m' = Map.map (fun _ -> parseSquareProg) bp.squares
+        {
+        center = bp.center;
+        defaultSquare = Map.find bp.usedSquare m';
+        squares = parseBoardProg bp.prog m';
+    } *)

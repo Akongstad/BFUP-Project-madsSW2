@@ -316,7 +316,7 @@ let rec stmntEval2 stm =
 type word = (char * int) list
 type squareFun = word -> int -> int -> Result<int, Error>
 
-let stmntToSquareFun stm : squareFun =
+let stmntToSquareFun2 stm : squareFun =
     (fun w pos acc ->
         (push
          >>>= declare "_pos_"
@@ -329,11 +329,20 @@ let stmntToSquareFun stm : squareFun =
          |> evalSM (mkState [] w [])))
 
 
+let stmntToSquareFun stm : squareFun =
+    (fun w pos acc ->
+        let s = mkState [("_pos_",pos);("_acc_",acc);("_result_",0)] w ["_pos_";"_acc_";"_result_"]
+        stmntEval2 stm 
+        >>>= lookup "_result_" 
+        |> evalSM s 
+    )
+
+
 type coord = int * int
 
 type boardFun = coord -> Result<squareFun option, Error>
 
-let stmntToBoardFun (stm: stm) m =
+let stmntToBoardFun2 (stm: stm) m =
     (fun ((x, y): coord) ->
         match (push
                >>>= declare "_x_"
@@ -349,6 +358,21 @@ let stmntToBoardFun (stm: stm) m =
             | Some v -> Success(Some v)
             | None -> Success None
         | _ -> Success None)
+
+let stmntToBoardFun (stm: stm) m =
+    (
+        fun ((x, y): coord) ->
+        let s = mkState [("_x_",x);("_y_",y);("_result_",0)] [] ["_x_";"_y_";"_result_"]
+        stmntEval2 stm
+        >>>= lookup "_result_" 
+        >>= (fun result -> 
+            match Map.tryFind result m with
+            | Some v -> ret(Some v)
+            | None -> ret None
+            )
+        |> evalSM s     
+    )
+
 
 type board =
     { center: coord

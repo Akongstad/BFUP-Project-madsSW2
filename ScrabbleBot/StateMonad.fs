@@ -74,11 +74,11 @@ module internal StateMonad
                 match Map.tryFind x m with
                 | Some v -> Some v
                 | None   -> aux ms
-
         S (fun s -> 
               match aux s.vars with
               | Some v -> Success (v, s)
               | None   -> Failure (VarNotFound x))
+    
 
     let declare (var : string) : SM<unit> =
         S(fun s -> 

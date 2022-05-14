@@ -6,26 +6,25 @@ open ScrabbleUtil.Dictionary
 open StateMonad
 open madsSW2.State
 open Parser
+open FParsecLight.TextParser
         
 type internal move = state -> (coord * (uint32 * (char * int))) list
 
+let getRes sq = 
+    match sq with
+    |Success a -> a
+    |Failure x -> x
 
+let isHole (coord:coord)(board:board) = //(board.squares coord) |> getRes |> Option.isNone
+   match (board.squares coord)  with
+    | Success opt -> 
+        let res = opt |> Option.isNone 
+        ScrabbleUtil.DebugPrint.forcePrint $"%A{coord} -> %b{res}"
+        res
+    | Failure _ -> 
+        ScrabbleUtil.DebugPrint.forcePrint $"We have a Failure"
+        true 
 // We need implementation from assignment 2.17 and 3.8 i think
-let isValid (coord:coord)(board:board) =
-        let res = board.squares coord
-        match res with
-        | Success boardPos  ->
-            match boardPos with  
-            |None -> 
-                ScrabbleUtil.DebugPrint.forcePrint $"We have a hole"
-                false
-            |Some squareProg ->
-                let lookup = (squareProg.Item 0) Eval.hello 0 0
-                ScrabbleUtil.DebugPrint.forcePrint $"values: %A{lookup}"
-                true
-        | Failure _ ->
-            ScrabbleUtil.DebugPrint.forcePrint $"We have a hole"
-            false
 (* let isHole2 board coord index acc =
     board.squares coord |>
     fun(StateMonad.Success sq) -> sq |>
@@ -141,19 +140,19 @@ let findPlayableTiles (hand:MultiSet.MultiSet<uint32>) (dict:Dict) (placedTiles:
                             match step (fst elem) dict with      
                             | None -> acc //No move
                             | Some(false, dic) -> 
-                                if   (isFreeAdjacentSquares x y isHorizontal placedTiles) |> Async.RunSynchronously && isValid (coord(x,y)) board
+                                if   (isFreeAdjacentSquares x y isHorizontal placedTiles) |> Async.RunSynchronously
                                 then aux (MultiSet.removeSingle letterIndex hand) dic (placement::move) acc tiles (incrementCoord isHorizontal (x, y) )
                                 else acc
-                            | Some(true, _) -> 
-                                if (isFreeAdjacentSquares x y isHorizontal placedTiles) |> Async.RunSynchronously && isValid (coord(x,y)) board
+                            | Some(true, dic) -> 
+                                if (isFreeAdjacentSquares x y isHorizontal placedTiles) |> Async.RunSynchronously
                                 then
+                                    aux (MultiSet.removeSingle letterIndex hand) dic (placement::move) ((placement::move)::acc) tiles (incrementCoord isHorizontal (x, y))
                                 //DebugPrint.forcePrint $"Found Word (128): %A{placement::move}\n" 
-                                (placement::move)::acc
-                                else acc 
+                                else acc
                                 //ScrabbleUtil.DebugPrint.forcePrint $"Some(true)(126): %A{}\n"      
                 ) acc tile
         ) moveList hand 
-    aux hand dict [] [[]] tiles startCoord
+    aux hand dict [] [] tiles startCoord
         
         
     
@@ -161,13 +160,18 @@ let findPlayableTiles (hand:MultiSet.MultiSet<uint32>) (dict:Dict) (placedTiles:
 
 
 let rec findMove hand dict placedTiles tiles (prefixList:List<coord * list<(int * int) * (uint * (char * int))>>) isHorizontal moveList (board:board) =
-    match prefixList with
-    | [] -> moveList
-    | prefix::t -> 
-        let move = findPlayableTiles hand (prefixDict dict prefix) placedTiles tiles isHorizontal (getStartCoord prefix isHorizontal) board
-        match move with 
-        | [] -> findMove hand dict placedTiles tiles t isHorizontal moveList board
-        | _ -> findMove hand dict placedTiles tiles t isHorizontal (moveList@move) board
+    async{
+        match prefixList with
+        | [] -> return moveList
+        | prefix::t -> 
+            let move = findPlayableTiles hand (prefixDict dict prefix) placedTiles tiles isHorizontal (getStartCoord prefix isHorizontal) board
+            match move with 
+            | [] ->    
+                return! findMove hand dict placedTiles tiles t isHorizontal moveList board
+            | _ -> 
+                //DebugPrint.forcePrint $"Valid move found:  %A{move}\n"
+                return! findMove hand dict placedTiles tiles t isHorizontal (moveList@move) board
+        }
 
 let bestMove moveList = List.fold (fun acc elem -> if List.length elem > List.length acc then elem else acc) [] moveList
 
@@ -183,18 +187,40 @@ let generateAction (st:state) =
     else //find move
         let verticalPrefixList = Map.toList st.verticalPrefixes
         let horizontalPrefixList = Map.toList st.horizontalPrefixes
+        
+        DebugPrint.forcePrint $"Chunking vert\n"
+        let maxChunkSize = 5
+        let chunksVert = 
+            match List.length verticalPrefixList >= maxChunkSize with
+            | false -> [verticalPrefixList]
+            | true -> List.chunkBySize (verticalPrefixList.Length/maxChunkSize) verticalPrefixList  
+        
+        DebugPrint.forcePrint $"Chunking hori\n"
+        let chunksHori = 
+            match List.length horizontalPrefixList >= maxChunkSize with
+            | false -> [horizontalPrefixList]
+            | true -> List.chunkBySize (horizontalPrefixList.Length/maxChunkSize) horizontalPrefixList
+        
+        DebugPrint.forcePrint $"Done Chunking\n"
+         
+        let moveList = 
+            List.fold (fun acc chunk -> 
+                (findMove st.hand st.dict st.placedTiles st.tiles chunk true [] st.board)::acc
+            ) (List.fold (fun acc chunk -> 
+                (findMove st.hand st.dict st.placedTiles st.tiles chunk false [] st.board)::acc
+            ) [] chunksVert) chunksHori
+                |> Async.Parallel
+                |> Async.RunSynchronously 
 
-        let verticalMoveList = findMove st.hand st.dict st.placedTiles st.tiles verticalPrefixList false [] st.board
-        let verticalMove = bestMove verticalMoveList 
 
-        let horizontalMoveList = findMove st.hand st.dict st.placedTiles st.tiles horizontalPrefixList true [] st.board
-        let horizontalMove = bestMove horizontalMoveList
 
-        match verticalMove.Length, horizontalMove.Length  with 
-        |0,0 -> []//change pieces?
-        |0,_ -> List.rev horizontalMove 
-        |_,0 -> List.rev verticalMove
-        |x,y -> if x >=y then verticalMove else horizontalMove
+        //DebugPrint.forcePrint $"Async moveList: %A{moveList}\n"
+    
+
+        let collectedMoveList = Array.fold (fun acc x -> x@acc) [] moveList
+        let bestMove = bestMove collectedMoveList
+        //DebugPrint.forcePrint $"Async bestMove (not reversed): %A{bestMove}\n"
+        List.rev bestMove
         
 
 

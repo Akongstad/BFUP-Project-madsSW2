@@ -97,14 +97,14 @@ module Scrabble =
         let rec aux (st : State.state) =
             Print.printHand pieces (State.hand st)
             
-            forcePrint $"Horizontal:  "
+            (* forcePrint $"Horizontal:  "
             Print.printPrefixes st.horizontalPrefixes
             forcePrint $"\n"
             forcePrint $"Vertical:  "
             Print.printPrefixes st.verticalPrefixes
-            forcePrint $"\n"
+            forcePrint $"\n" *)
 
-            forcePrint $"Turn = %d{st.playerTurn} %d{st.playerNumber}\n0 "
+            //forcePrint $"Turn = %d{st.playerTurn} %d{st.playerNumber}\n0 "
             debugPrint "Input move (format '(<x-coordinate> <y-coordinate> <piece id><character><point-value> )*', note the absence of space between the last inputs)\n\n"
             
             (* let input = System.Console.ReadLine()
