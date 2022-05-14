@@ -33,8 +33,8 @@ let main argv =
 //    let board      = ScrabbleUtil.InfiniteRandomBoard.infiniteRandomBoard ()
 //    let board      = ScrabbleUtil.InfiniteRandomBoard.infiniteRandomBoardSeed (Some 42)
 
-//    let board      = ScrabbleUtil.HoleBoard.holeBoard ()
-//    let board      = ScrabbleUtil.InfiniteHoleBoard.infiniteHoleBoard ()
+//let board      = ScrabbleUtil.HoleBoard.holeBoard ()
+    //let board      = ScrabbleUtil.InfiniteHoleBoard.infiniteHoleBoard ()
 
     let words     = readLines "./Dictionaries/English.txt"
 
@@ -55,11 +55,11 @@ let main argv =
     let dictionary, time =
         time (fun () -> ScrabbleUtil.Dictionary.mkDict words dictAPI)
         
-    //let madsdrengen  =  spawnMultiples "mads" dictionary madsSW2.Scrabble.startGame 1 
-//    let oxydrengen = spawnMultiples "Oxy" dictionary  Oxyphenbutazone.Scrabble.startGame 1
+    let madsdrengen  =  spawnMultiples "mads" dictionary madsSW2.Scrabble.startGame 1 
+    let oxydrengen = spawnMultiples "Oxy" dictionary  Oxyphenbutazone.Scrabble.startGame 1
 
-    let players  =  spawnMultiples "mads" dictionary madsSW2.Scrabble.startGame 1 
-    //let players = madsdrengen @ oxydrengen   
+    //let players  =  spawnMultiples "mads" dictionary madsSW2.Scrabble.startGame 1 
+    let players = madsdrengen @ oxydrengen   
       // [("mads", madsSW2.Scrabble.startGame)]
     //let players = [("mads",dictionary ,madsSW2.Scrabble.startGame), ("oxyfjæs", dictionary, Oxyphenbutazone.Scrabble.startGame)]
     //let players = spawnMultiples "OxyphenButazone" dictionary Oxyphenbutazone.Scrabble.startGame 4

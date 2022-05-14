@@ -104,7 +104,7 @@ module Scrabble =
             Print.printPrefixes st.verticalPrefixes
             forcePrint $"\n"
 
-            debugPrint $"Turn = %d{st.playerTurn} %d{st.playerNumber}\n0 "
+            forcePrint $"Turn = %d{st.playerTurn} %d{st.playerNumber}\n0 "
             debugPrint "Input move (format '(<x-coordinate> <y-coordinate> <piece id><character><point-value> )*', note the absence of space between the last inputs)\n\n"
             
             (* let input = System.Console.ReadLine()
@@ -193,16 +193,16 @@ module Scrabble =
                       hand =  %A{hand}
                       timeout = %A{timeout}\n\n"
             
-           
+        
         //let dict = dictf true // Uncomment if using a gaddag for your dictionary
         let dict = dictf false // Uncomment if using a trie for your dictionary
         let board = Parser.mkBoard boardP
-
         let forfeitedPlayers = List.Empty
                   
         let handSet = List.fold (fun acc (x, k) -> MultiSet.add x k acc) MultiSet.empty hand
         
         let boardTiles = Map.empty
+
         //TODO Save this in state. For checking whether a square is a hole and calculating points 
         let boardFun =
             Map.map(fun _ value -> Parser.parseSquareProg value) boardP.squares

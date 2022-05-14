@@ -68,6 +68,10 @@ module internal State =
         |true, false -> Horizontal
         |false, true  -> Vertical
 
+    let sortMs (ms:((int * int) * (uint * (char * int))) list) isHorizontal  =
+        match isHorizontal with
+        |true -> List.sortBy (fun ((x,_),(_,(_,_))) -> x ) ms
+        |false -> List.sortBy (fun ((_,y),(_,(_,_))) -> y ) ms
     let isHorizontal (ms:((int * int) * (uint * (char * int))) list) placedTiles =
         if ms.Length = 1 then
             let direction = getDirection (coord(fst(List.head ms))) placedTiles
@@ -85,18 +89,129 @@ module internal State =
         match Map.containsKey (x,y) prefixes with
         | false -> findStartIndexHorizontal (x-1,y) prefixes
         | true -> 
-            DebugPrint.forcePrint $"findstartIndexHorizontal: %A{coord(x,y)}"
+            DebugPrint.debugPrint $"findstartIndexHorizontal: %A{coord(x,y)}"
             coord(x,y)
 
     let rec findStartIndexVertical (x,y) prefixes =
         match Map.containsKey (x,y) prefixes with
         | false -> findStartIndexVertical (x,y-1) prefixes
         | true -> 
-            DebugPrint.forcePrint $"findstartIndexVerical: %A{coord(x,y)}"
+            DebugPrint.debugPrint $"findstartIndexVerical: %A{coord(x,y)}"
             coord(x,y)
 
+
+
+    let getCoordAndTileFromMove moveList (placedTiles: Map<coord,(uint*(char*int))>) = 
+        List.fold (fun acc (x,k) -> Map.add (coord(x)) (k) acc) placedTiles moveList //get list of coord and (char * char point val)
+        
+
+    let getNewSearchCoord (x,y) isHorizontal isSuffix = 
+            match isHorizontal with
+            | false -> 
+                match isSuffix with 
+                |false -> (x,y-1)
+                |true -> (x,y+1) 
+            | true -> 
+                match isSuffix with 
+                |false -> (x-1,y)
+                |true -> (x+1,y) 
+    
+    let getFixFromMove placedTiles prefixes (ms:((int * int) * (uint * (char * int))) list) isHorizontal isSuffix newPrefixes= 
+        let (x,y) = Coord.getX(ms.Head |> fst), Coord.getY((ms.Head)|> fst)
+        
+        let rec aux placedTiles prefixes coords isHorizontal =
+            let newCoord = getNewSearchCoord coords isHorizontal isSuffix
+            match Map.containsKey (coord(newCoord)) placedTiles with
+            | false -> newPrefixes
+            | true when Map.containsKey (coord(newCoord)) prefixes ->
+                let prefix = Map.find (coord(newCoord)) prefixes
+                Map.add (coord(newCoord)) prefix newPrefixes
+            | true -> aux placedTiles prefixes newCoord isHorizontal
+        aux placedTiles prefixes (x,y) isHorizontal 
+
+    let rec getMidfixesFromMove prefixes (ms:((int * int) * (uint * (char * int))) list) isHorizontal acc = 
+        let headCoord = coord(fst ms.Head)
+        let tailCoord = coord(fst ms.Tail.Head)
+        DebugPrint.forcePrint $"headCoord %A{headCoord}\n"
+        DebugPrint.forcePrint $"tailCoord %A{tailCoord}\n"
+        let diff = 
+            match isHorizontal with
+            | false -> 
+                (Coord.getY headCoord - Coord.getY tailCoord)
+            | true -> 
+                (Coord.getX headCoord - Coord.getX tailCoord)   
+        //DebugPrint.forcePrint $"diff %d{diff}\n"
+        match List.length ms with
+        | 2 -> 
+            match  ms with
+            | [] -> acc //will never happen
+            | _ when not(System.Math.Abs diff = 1) -> 
+                let oldPrefixCoords = 
+                    match isHorizontal with
+                    | false -> 
+                        coord(Coord.getX headCoord, Coord.getY headCoord + 1)
+                    | true -> 
+                        coord(Coord.getX headCoord + 1, Coord.getY headCoord)
+                DebugPrint.forcePrint $"diff %d{diff} coord: %A{oldPrefixCoords}>\n"
+                
+                let prefix = Map.find oldPrefixCoords prefixes
+                DebugPrint.forcePrint $"Prefix: %A{prefix}\n"
+                
+                Map.add oldPrefixCoords prefix acc
+            | _ -> acc
+        | _ -> 
+            match  ms with
+            | [] -> acc
+            | _::t when not(System.Math.Abs diff = 1) -> 
+                let oldPrefixCoords = 
+                    match isHorizontal with
+                    | false -> 
+                        coord(Coord.getX headCoord, Coord.getY headCoord + 1)
+                    | true -> 
+                        coord(Coord.getX headCoord + 1, Coord.getY headCoord)
+
+                DebugPrint.forcePrint $"diff %d{diff} coord: %A{oldPrefixCoords}>\n"
+                
+                let prefix = Map.find oldPrefixCoords prefixes
+                DebugPrint.forcePrint $"Prefix: %A{prefix}\n"
+                
+                let newAcc = Map.add oldPrefixCoords prefix acc
+                getMidfixesFromMove prefixes t isHorizontal newAcc
+            | _::t -> getMidfixesFromMove prefixes t isHorizontal acc
+        
+    let getFixesFromMove (prefixes:Map<coord,((int * int) * (uint * (char * int))) list>) (placedTiles: Map<coord,(uint*(char*int))>) (ms:((int * int) * (uint * (char * int))) list) isHorizontal  = 
+        ScrabbleUtil.DebugPrint.forcePrint $"Get midfixes\n" 
+        ScrabbleUtil.DebugPrint.forcePrint $"Get ms %d{List.length ms}\n" 
+        let midFixes =
+            match List.length ms with
+            | 1 -> Map.empty
+            | _ -> getMidfixesFromMove prefixes ms isHorizontal (Map.empty)
+
+        ScrabbleUtil.DebugPrint.forcePrint $"Get prefixes. fixes: %A{midFixes}\n" 
+        let midAndPrefixes = getFixFromMove (getCoordAndTileFromMove ms placedTiles) prefixes ms isHorizontal false midFixes
+        //DebugPrint.forcePrint $"Get suffixes. fixes: %A{midAndPrefixes}\n" 
+        let allFixes = getFixFromMove (getCoordAndTileFromMove ms placedTiles) prefixes ms isHorizontal true midAndPrefixes
+        //DebugPrint.forcePrint $"All fixes %A{allFixes}\n" 
+        allFixes
+    
     let addOpposite (prefixes) (placedTiles) (ms:((int * int) * (uint * (char * int))) list) isHorizontal = 
-        List.fold (fun acc ((x,y),(tile)) -> 
+        List.fold (fun acc msItem -> 
+            let newFixes = getFixesFromMove acc placedTiles ([msItem]) isHorizontal
+            let oppositePrefixesCleaned = 
+                Map.fold (fun acc coords _ -> 
+                Map.remove coords acc ) acc newFixes
+            let word = 
+                Map.fold (fun acc _ elem -> 
+                elem @ acc
+                ) [msItem] newFixes
+            let wordSorted = sortMs word isHorizontal
+            let startCoord = wordSorted.Head |> fst
+            Map.add startCoord wordSorted oppositePrefixesCleaned
+            ) prefixes ms
+                
+    
+
+        (* List.fold (fun acc ((x,y),(tile)) -> 
                 let coordDecrement =
                     if isHorizontal then (x-1,y)
                     else (x,y-1)
@@ -111,22 +226,31 @@ module internal State =
                     let oldPrefix = Map.find (startCord) prefixes
                     let newMap = Map.remove (startCord) prefixes
                     Map.add (startCord) (oldPrefix @ [((x,y),(tile))])newMap
-                    ) prefixes ms
-                
+                    ) prefixes ms *)
+
     let addHorizontalPrefix (x,y) (st:state) (ms:((int * int) * (uint * (char * int))) list)  = 
-        match Map.containsKey (x-1,y) st.placedTiles with
-        | false -> 
+        match Map.isEmpty st.placedTiles with
+        | true -> 
              //Only first move
             //This move is a new prefix. //Only first move
             let newHorizontal = Map.add (x,y) ms st.horizontalPrefixes
             let newVertical = addOpposite st.verticalPrefixes st.placedTiles ms false
             newHorizontal,newVertical
-        | true ->
+        | false ->
+            ScrabbleUtil.DebugPrint.debugPrint $"Get fixes\n" 
+            let newFixes = getFixesFromMove st.horizontalPrefixes st.placedTiles ms true
+            let horizontalPrefixesCleaned = 
+                Map.fold (fun acc coords elem -> 
+                Map.remove coords acc ) st.horizontalPrefixes newFixes
             //This move is an extension of a prefix
-            let startCord = findStartIndexHorizontal (x,y) st.horizontalPrefixes
-            let oldPrefix = Map.find startCord st.horizontalPrefixes
-            let newMap = Map.remove startCord st.horizontalPrefixes
-            let newHorizontal = Map.add startCord (oldPrefix @ ms) newMap
+            let word = 
+                Map.fold (fun acc _ elem -> 
+                elem @ acc
+                ) ms newFixes
+            let wordSorted = sortMs word true
+            let startCoord = wordSorted.Head |> fst
+
+            let newHorizontal = Map.add startCoord wordSorted horizontalPrefixesCleaned
             let newVertical = addOpposite st.verticalPrefixes st.placedTiles ms false
             newHorizontal, newVertical
     
@@ -138,13 +262,28 @@ module internal State =
             let newHorizontal = addOpposite  st.horizontalPrefixes st.placedTiles ms true
             newHorizontal, newVertical
         | true ->
-            //This move is an extension of a prefix
+            (* //This move is an extension of a prefix
             let startCord = findStartIndexVertical (x,y) st.verticalPrefixes
-            DebugPrint.forcePrint $"StartCoord from find start index%A{startCord}\n"
+            DebugPrint.debugPrint $"StartCoord from find start index%A{startCord}\n"
             let oldPrefix = Map.find(startCord) st.verticalPrefixes
             let newMap = Map.remove startCord st.verticalPrefixes
             let newVertical = Map.add startCord (oldPrefix @ ms) newMap
-            let newHorizontal = addOpposite  st.horizontalPrefixes st.placedTiles ms true
+            let newHorizontal = addOpposite  st.horizontalPrefixes st.placedTiles ms true *)
+            ScrabbleUtil.DebugPrint.debugPrint $"Get fixes\n" 
+            let newFixes = getFixesFromMove st.verticalPrefixes st.placedTiles ms false
+            let VerticalPrefixesCleaned = 
+                Map.fold (fun acc coords elem -> 
+                Map.remove coords acc ) st.verticalPrefixes newFixes
+            //This move is an extension of a prefix
+            let word = 
+                Map.fold (fun acc _ elem -> 
+                elem @ acc
+                ) ms newFixes
+            let wordSorted = sortMs word true
+            let startCoord = wordSorted.Head |> fst
+
+            let newVertical = Map.add startCoord wordSorted VerticalPrefixesCleaned
+            let newHorizontal = addOpposite st.horizontalPrefixes st.placedTiles ms true 
             newHorizontal, newVertical
 
     let addPrefix (startCoord:coord) (st:state) (ms:((int * int) * (uint * (char * int))) list) isHorizontal = 
@@ -157,9 +296,6 @@ module internal State =
     let getWordAndCoordFromMoveHorizontol moveList placedWords =
         List.fold (fun acc (x,k) -> Map.add (coord(x), moveList))
         
-    let getCoordAndTileFromMove moveList (placedTiles: Map<coord,(uint*(char*int))>) = 
-        List.fold (fun acc (x,k) -> Map.add (coord(x)) (k) acc) placedTiles moveList //get list of coord and (char * char point val)
-        
     let getUsedTileIdFromMove moveList = 
         List.fold (fun acc (x,k) -> fst(k)::acc) List.Empty moveList //get the tile ids of the played move
     
@@ -169,10 +305,6 @@ module internal State =
     let addToHandSet newTiles hand = 
         List.fold (fun acc (x, k) -> MultiSet.add x k acc) hand newTiles //adds new tiles to the hand
     
-    let sortMs (ms:((int * int) * (uint * (char * int))) list) isHorizontal  =
-        match isHorizontal with
-        |true -> List.sortBy (fun ((x,_),(_,(_,_))) -> x ) ms
-        |false -> List.sortBy (fun ((_,y),(_,(_,_))) -> y ) ms
 
         
     
@@ -217,12 +349,13 @@ module internal State =
                 //ScrabbleUtil.DebugPrint.forcePrint $"new board: %A{newBoardTiles}\n" 
 
                 //ScrabbleUtil.DebugPrint.forcePrint $"Finding startcoord for prefix\n" 
-                let prefixStartCoord = ms.Head |> fst
-                ScrabbleUtil.DebugPrint.forcePrint $"ms: %A{ms}\n" 
-                ScrabbleUtil.DebugPrint.forcePrint $"Adding new prefix\n" 
+                let prefixStartCoord = msSorted.Head |> fst
+                ScrabbleUtil.DebugPrint.debugPrint $"ms Sorted: %A{msSorted}\n" 
+                //ScrabbleUtil.DebugPrint.debugPrint $"Adding new prefix: StartCoord = %A{prefixStartCoord}\n" 
                 let newPrefixes = addPrefix prefixStartCoord st msSorted isHorizontal
+                //ScrabbleUtil.DebugPrint.forcePrint $"new board: %A{newBoardTiles}\n" 
 
-                ScrabbleUtil.DebugPrint.forcePrint $"Saving state\n" 
+                ScrabbleUtil.DebugPrint.debugPrint $"Saving state\n" 
                 {st with 
                     playerTurn = changePlayerTurn st; 
                     hand= nextHand;
@@ -236,10 +369,14 @@ module internal State =
         let isHorizontal = isHorizontal ms st.placedTiles
         let msSorted = sortMs ms isHorizontal
 
+
         let newBoardTiles = getCoordAndTileFromMove msSorted st.placedTiles
-        let newPrefixes = addPrefix (fst msSorted.Head) st msSorted isHorizontal
+        
+        let prefixStartCoord = msSorted.Head |> fst
+        let newPrefixes = addPrefix prefixStartCoord st msSorted isHorizontal
+        
         {st with 
-            playerNumber=changePlayerTurn st; 
+            playerTurn=changeTurn st; 
             placedTiles = newBoardTiles;
             horizontalPrefixes = newPrefixes |> fst; 
             verticalPrefixes = newPrefixes |> snd}

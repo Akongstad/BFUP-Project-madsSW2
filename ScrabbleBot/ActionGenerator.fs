@@ -9,9 +9,21 @@ open Parser
 type internal move = state -> (coord * (uint32 * (char * int))) list
 
 
-// Is square a hole? If square does not have a squareprog. eg doubleLetterScore. Square is hole.
 // We need implementation from assignment 2.17 and 3.8 i think
-let isHole (coord:coord) (board:board) (squares:Map<int, squareProg>) = failwith "Not implemented"
+let isHole (coord:coord)(board:board) =
+        let square = board.squares coord
+        DebugPrint.forcePrint $"Square (hole): %A{square}"
+        match board.squares coord with
+            |StateMonad.Success(result) -> 
+                    match result with 
+                    |None -> true
+                    |_ -> false
+            |_ -> false //hvad hvis selve boardfun fejler, saa havner vi hernede og siger der ikke et et hul
+
+(* let isHole2 board coord index acc =
+    board.squares coord |>
+    fun(StateMonad.Success sq) -> sq |>
+    Option.map (fun x -> Map.find i x Eval.) *)
     
 let isEmpty (placedTiles: Map<coord,uint*(char*int)>) (coord:coord) =
      not(Map.containsKey (fst(coord),snd(coord)) placedTiles)
@@ -67,7 +79,8 @@ let prefixDict (dict:Dict) (prefixChars:coord * list<(int * int) * (uint * (char
        ) [] suffixChars *)
 
         
-let isFreeAdjacentSquares x y isHorizontal placedTiles=
+let isFreeAdjacentSquares x y isHorizontal placedTiles : Async<bool> =
+   async {
     let north = Map.containsKey (x,y-1) placedTiles //log n running time
     let south = Map.containsKey (x,y+1) placedTiles
     let east = Map.containsKey (x+1,y) placedTiles
@@ -75,11 +88,15 @@ let isFreeAdjacentSquares x y isHorizontal placedTiles=
 
     match isHorizontal with
     |true -> match north, east, south with
-                |false, false, false -> true
-                |_,_,_ -> false
+                |false, false, false -> return true
+                |_,_,_ ->   return false
     |false -> match south, east, west with
-                |false, false, false -> true
-                |_,_,_ -> false
+                |false, false, false -> return true
+                |_,_,_ ->  return false
+   }
+    
+
+
 
 
 let incrementCoord isHorizontal (x,y) = 
@@ -97,13 +114,15 @@ let getStartCoord (prefixChars:coord * list<(int * int) * (uint * (char * int))>
     |> incrementCoord isHorizontal
 
 
-let findPlayableTiles (hand:MultiSet.MultiSet<uint32>) (dict:Dict) (placedTiles:Map<coord,uint*(char*int)>) (tiles:Map<uint,tile>) (isHorizontal:bool) (startCoord:coord) =
+let findPlayableTiles (hand:MultiSet.MultiSet<uint32>) (dict:Dict) (placedTiles:Map<coord,uint*(char*int)>) (tiles:Map<uint,tile>) (isHorizontal:bool) (startCoord:coord) (board:board) =
+    
     //Step with word/chars already on the board as prefix.
     //Find word from tiles in hand
     let rec aux (hand:MultiSet.MultiSet<uint32>) (dict:Dict) (move:((coord * (uint32 * (char * int))) list)) (moveList:((coord * (uint32 * (char * int))) list)list) (tiles:Map<uint,tile>) (x,y) = 
         //Translate hand to tiles
         MultiSet.fold(
             fun acc letterIndex _  ->
+            
                 let tile = Map.find letterIndex tiles //
                 //Fold to check all if wildcard instance. Otherwise this will only run once
                 //Move should prob be reversed
@@ -116,36 +135,41 @@ let findPlayableTiles (hand:MultiSet.MultiSet<uint32>) (dict:Dict) (placedTiles:
                             match step (fst elem) dict with      
                             | None -> acc //No move
                             | Some(false, dic) -> 
-                                if isFreeAdjacentSquares x y isHorizontal placedTiles 
+                                if   (isFreeAdjacentSquares x y isHorizontal placedTiles) |> Async.RunSynchronously //&& not(isHole (coord(x,y)) board)
                                 then aux (MultiSet.removeSingle letterIndex hand) dic (placement::move) acc tiles (incrementCoord isHorizontal (x, y) )
                                 else acc
                             | Some(true, _) -> 
-                                if isFreeAdjacentSquares x y isHorizontal placedTiles
+                                if (isFreeAdjacentSquares x y isHorizontal placedTiles) |> Async.RunSynchronously //&& not(isHole (coord(x,y)) board)
                                 then
                                 //DebugPrint.forcePrint $"Found Word (128): %A{placement::move}\n" 
                                 (placement::move)::acc
                                 else acc 
                                 //ScrabbleUtil.DebugPrint.forcePrint $"Some(true)(126): %A{}\n"      
                 ) acc tile
-        ) moveList hand
+        ) moveList hand 
     aux hand dict [] [[]] tiles startCoord
+        
+        
+    
+    
 
 
-let rec findMove hand dict placedTiles tiles (prefixList:List<coord * list<(int * int) * (uint * (char * int))>>) isHorizontal moveList =
+let rec findMove hand dict placedTiles tiles (prefixList:List<coord * list<(int * int) * (uint * (char * int))>>) isHorizontal moveList (board:board) =
     match prefixList with
     | [] -> moveList
     | prefix::t -> 
-        let move = findPlayableTiles hand (prefixDict dict prefix) placedTiles tiles isHorizontal (getStartCoord prefix isHorizontal)
+        let move = findPlayableTiles hand (prefixDict dict prefix) placedTiles tiles isHorizontal (getStartCoord prefix isHorizontal) board
         match move with 
-        | [] -> findMove hand dict placedTiles tiles t isHorizontal moveList
-        | _ -> findMove hand dict placedTiles tiles t isHorizontal (moveList@move)
+        | [] -> findMove hand dict placedTiles tiles t isHorizontal moveList board
+        | _ -> findMove hand dict placedTiles tiles t isHorizontal (moveList@move) board
 
 let bestMove moveList = List.fold (fun acc elem -> if List.length elem > List.length acc then elem else acc) [] moveList
 
 let generateAction (st:state) = 
+    
     if Map.isEmpty st.placedTiles
     then //place first move center on empty board.
-        let centerMoveList = findPlayableTiles st.hand st.dict Map.empty st.tiles true (0,0)
+        let centerMoveList = findPlayableTiles st.hand st.dict Map.empty st.tiles true (0,0) st.board
         let centerMove = bestMove centerMoveList
         match centerMove.Length with
         |0 -> [] //pass
@@ -154,15 +178,17 @@ let generateAction (st:state) =
         let verticalPrefixList = Map.toList st.verticalPrefixes
         let horizontalPrefixList = Map.toList st.horizontalPrefixes
 
-        let verticalMoveList = findMove st.hand st.dict st.placedTiles st.tiles verticalPrefixList false []
+        let verticalMoveList = findMove st.hand st.dict st.placedTiles st.tiles verticalPrefixList false [] st.board
         let verticalMove = bestMove verticalMoveList 
 
-        let horizontalMoveList = findMove st.hand st.dict st.placedTiles st.tiles horizontalPrefixList true []
+        let horizontalMoveList = findMove st.hand st.dict st.placedTiles st.tiles horizontalPrefixList true [] st.board
         let horizontalMove = bestMove horizontalMoveList
 
         match verticalMove.Length, horizontalMove.Length  with 
         |0,0 -> []//change pieces?
-        |0,_ -> List.rev horizontalMove
+        |0,_ -> List.rev horizontalMove 
         |_,0 -> List.rev verticalMove
         |x,y -> if x >=y then verticalMove else horizontalMove
+        
+
 
