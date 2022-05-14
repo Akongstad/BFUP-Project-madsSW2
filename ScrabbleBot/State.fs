@@ -60,9 +60,12 @@ module internal State =
     let getDirection (c:coord) placedTiles =
         
         let extendsHorizontal = Map.containsKey (fst(c)-1,snd(c)) placedTiles
-        let extendsVertical =  Map.containsKey (fst(c),snd(c)-1) placedTiles
+        let prependsHorizontal = Map.containsKey (fst(c)+1,snd(c)) placedTiles
         
-        match extendsHorizontal, extendsVertical with
+        let extendsVertical =  Map.containsKey (fst(c),snd(c)-1) placedTiles
+        let prependsVertical = Map.containsKey (fst(c),snd(c)+1) placedTiles
+        
+        match extendsHorizontal || prependsHorizontal, extendsVertical || prependsVertical with
         |true, true -> Neither
         |false, false -> Both
         |true, false -> Horizontal
@@ -76,7 +79,9 @@ module internal State =
         if ms.Length = 1 then
             let direction = getDirection (coord(fst(List.head ms))) placedTiles
             match direction with
-            |Neither -> failwith "Edge case is both horizontal and vertical prefix"
+            |Neither ->
+                    DebugPrint.forcePrint $"Edge case is both horizontal and vertical prefix. Extends both so direction does not matter"
+                    true
             |Vertical -> false
             |Horizontal -> true 
             | _ -> failwith "impossible"
@@ -89,14 +94,14 @@ module internal State =
         match Map.containsKey (x,y) prefixes with
         | false -> findStartIndexHorizontal (x-1,y) prefixes
         | true -> 
-            DebugPrint.debugPrint $"findstartIndexHorizontal: %A{coord(x,y)}"
+            DebugPrint.forcePrint $"findstartIndexHorizontal: %A{coord(x,y)}"
             coord(x,y)
 
     let rec findStartIndexVertical (x,y) prefixes =
         match Map.containsKey (x,y) prefixes with
         | false -> findStartIndexVertical (x,y-1) prefixes
         | true -> 
-            DebugPrint.debugPrint $"findstartIndexVerical: %A{coord(x,y)}"
+            DebugPrint.forcePrint $"findstartIndexVerical: %A{coord(x,y)}"
             coord(x,y)
 
 
@@ -140,7 +145,7 @@ module internal State =
                 (Coord.getY headCoord - Coord.getY tailCoord)
             | true -> 
                 (Coord.getX headCoord - Coord.getX tailCoord)   
-        //DebugPrint.forcePrint $"diff %d{diff}\n"
+        //forcePrint.forcePrint $"diff %d{diff}\n"
         match List.length ms with
         | 2 -> 
             match  ms with
@@ -180,18 +185,18 @@ module internal State =
             | _::t -> getMidfixesFromMove prefixes t isHorizontal acc
         
     let getFixesFromMove (prefixes:Map<coord,((int * int) * (uint * (char * int))) list>) (placedTiles: Map<coord,(uint*(char*int))>) (ms:((int * int) * (uint * (char * int))) list) isHorizontal  = 
-        ScrabbleUtil.DebugPrint.forcePrint $"Get midfixes\n" 
-        ScrabbleUtil.DebugPrint.forcePrint $"Get ms %d{List.length ms}\n" 
+        //ScrabbleUtil.DebugPrint.forcePrint $"Get midfixes\n" 
+        //ScrabbleUtil.DebugPrint.forcePrint $"ms in getFixes from move: %A{ms}\n" 
         let midFixes =
             match List.length ms with
             | 1 -> Map.empty
             | _ -> getMidfixesFromMove prefixes ms isHorizontal (Map.empty)
 
-        ScrabbleUtil.DebugPrint.forcePrint $"Get prefixes. fixes: %A{midFixes}\n" 
+        //ScrabbleUtil.DebugPrint.forcePrint $"Get prefixes. midfixes: %A{midFixes}\n" 
         let midAndPrefixes = getFixFromMove (getCoordAndTileFromMove ms placedTiles) prefixes ms isHorizontal false midFixes
-        //DebugPrint.forcePrint $"Get suffixes. fixes: %A{midAndPrefixes}\n" 
+        DebugPrint.forcePrint $"Get suffixes. fixes: %A{midAndPrefixes}\n" 
         let allFixes = getFixFromMove (getCoordAndTileFromMove ms placedTiles) prefixes ms isHorizontal true midAndPrefixes
-        //DebugPrint.forcePrint $"All fixes %A{allFixes}\n" 
+        DebugPrint.forcePrint $"All fixes %A{allFixes}\n" 
         allFixes
     
     let addOpposite (prefixes) (placedTiles) (ms:((int * int) * (uint * (char * int))) list) isHorizontal = 
@@ -237,7 +242,8 @@ module internal State =
             let newVertical = addOpposite st.verticalPrefixes st.placedTiles ms false
             newHorizontal,newVertical
         | false ->
-            ScrabbleUtil.DebugPrint.debugPrint $"Get fixes\n" 
+            //ScrabbleUtil.DebugPrint.forcePrint $"Get fixes called Horizontally: ms: ‰A{ms} \n" 
+            //ScrabbleUtil.DebugPrint.forcePrint $"Get fixes\n" 
             let newFixes = getFixesFromMove st.horizontalPrefixes st.placedTiles ms true
             let horizontalPrefixesCleaned = 
                 Map.fold (fun acc coords elem -> 
@@ -255,22 +261,18 @@ module internal State =
             newHorizontal, newVertical
     
     let addVerticalPrefix (x,y) (st:state) (ms:((int * int) * (uint * (char * int))) list)  = 
-        match Map.containsKey (x,y-1) st.placedTiles with
-        | false -> 
-            //This move is a new prefix
+        match Map.isEmpty st.placedTiles with
+        | true ->
+            //ScrabbleUtil.forcePrint.forcePrint $"pls no \n" 
+            //This move is a new prefix        
             let newVertical = Map.add (x,y) ms st.verticalPrefixes
             let newHorizontal = addOpposite  st.horizontalPrefixes st.placedTiles ms true
             newHorizontal, newVertical
-        | true ->
-            (* //This move is an extension of a prefix
-            let startCord = findStartIndexVertical (x,y) st.verticalPrefixes
-            DebugPrint.debugPrint $"StartCoord from find start index%A{startCord}\n"
-            let oldPrefix = Map.find(startCord) st.verticalPrefixes
-            let newMap = Map.remove startCord st.verticalPrefixes
-            let newVertical = Map.add startCord (oldPrefix @ ms) newMap
-            let newHorizontal = addOpposite  st.horizontalPrefixes st.placedTiles ms true *)
-            ScrabbleUtil.DebugPrint.debugPrint $"Get fixes\n" 
+        | false ->
+            //ScrabbleUtil.DebugPrint.forcePrint $"Get fixes called vertically: ms: ‰A{ms} \n" 
+            //ScrabbleUtil.DebugPrint.forcePrint $"Get fixes\n" 
             let newFixes = getFixesFromMove st.verticalPrefixes st.placedTiles ms false
+            
             let VerticalPrefixesCleaned = 
                 Map.fold (fun acc coords elem -> 
                 Map.remove coords acc ) st.verticalPrefixes newFixes
@@ -279,7 +281,7 @@ module internal State =
                 Map.fold (fun acc _ elem -> 
                 elem @ acc
                 ) ms newFixes
-            let wordSorted = sortMs word true
+            let wordSorted = sortMs word false
             let startCoord = wordSorted.Head |> fst
 
             let newVertical = Map.add startCoord wordSorted VerticalPrefixesCleaned
@@ -305,20 +307,6 @@ module internal State =
     let addToHandSet newTiles hand = 
         List.fold (fun acc (x, k) -> MultiSet.add x k acc) hand newTiles //adds new tiles to the hand
     
-
-        
-    
-    let changePlayerTurn (st:state) =
-                let rec player pnr =
-                    if st.numberOfPlayers = pnr then
-                        if List.contains 1u st.ForfeitedPlayers then
-                            player 1u
-                        else 1u
-                    else if (List.contains (pnr+1u ) st.ForfeitedPlayers) then
-
-                            player st.playerTurn +  1u
-                         else st.playerTurn +  1u
-                player st.playerNumber
     let updatedForfeitedPlayers (st : state) playerId = playerId::st.ForfeitedPlayers
         
     let updatePlayerTurn st =
@@ -328,36 +316,34 @@ module internal State =
             | true -> aux next
             | _ -> next
         aux st.playerTurn
-    let changeTurn (st:state) = (st.playerTurn % st.numberOfPlayers) + 1u
-    
     let updateStatePlaySuccess st ms points newPieces =
 
                 let isHorizontal = isHorizontal ms st.placedTiles
                 let msSorted = sortMs ms isHorizontal
 
                 let usedTileIds = getUsedTileIdFromMove msSorted
-                //ScrabbleUtil.DebugPrint.forcePrint $"Got Used Tile ids: %A{usedTileIds}\n"
+                //ScrabbleUtil.forcePrint.forcePrint $"Got Used Tile ids: %A{usedTileIds}\n"
                 
-                //ScrabbleUtil.DebugPrint.forcePrint $"Removing from hand\n" 
+                //ScrabbleUtil.forcePrint.forcePrint $"Removing from hand\n" 
                 let currentHand = removeFromHandSet usedTileIds st.hand  
                 
-                //ScrabbleUtil.DebugPrint.forcePrint $"Adding new pieces to hand: %A{newPieces}\n" 
+                //ScrabbleUtil.forcePrint.forcePrint $"Adding new pieces to hand: %A{newPieces}\n" 
                 let nextHand = addToHandSet newPieces currentHand      
 
-                //ScrabbleUtil.DebugPrint.forcePrint $"Adding new tile to the board. Old board: %A{st.placedTiles}\n" 
+                //ScrabbleUtil.forcePrint.forcePrint $"Adding new tile to the board. Old board: %A{st.placedTiles}\n" 
                 let newBoardTiles = getCoordAndTileFromMove msSorted st.placedTiles
-                //ScrabbleUtil.DebugPrint.forcePrint $"new board: %A{newBoardTiles}\n" 
+                //ScrabbleUtil.forcePrint.forcePrint $"new board: %A{newBoardTiles}\n" 
 
-                //ScrabbleUtil.DebugPrint.forcePrint $"Finding startcoord for prefix\n" 
+                //ScrabbleUtil.forcePrint.forcePrint $"Finding startcoord for prefix\n" 
                 let prefixStartCoord = msSorted.Head |> fst
-                ScrabbleUtil.DebugPrint.debugPrint $"ms Sorted: %A{msSorted}\n" 
-                //ScrabbleUtil.DebugPrint.debugPrint $"Adding new prefix: StartCoord = %A{prefixStartCoord}\n" 
+                //ScrabbleUtil.DebugPrint.forcePrint $"ms Sorted: %A{msSorted}\n" 
+                //ScrabbleUtil.forcePrint.forcePrint $"Adding new prefix: StartCoord = %A{prefixStartCoord}\n" 
                 let newPrefixes = addPrefix prefixStartCoord st msSorted isHorizontal
-                //ScrabbleUtil.DebugPrint.forcePrint $"new board: %A{newBoardTiles}\n" 
+                //ScrabbleUtil.forcePrint.forcePrint $"new board: %A{newBoardTiles}\n" 
 
-                ScrabbleUtil.DebugPrint.debugPrint $"Saving state\n" 
+                //ScrabbleUtil.DebugPrint.forcePrint $"Saving state\n" 
                 {st with 
-                    playerTurn = changePlayerTurn st; 
+                    playerTurn = updatePlayerTurn st; 
                     hand= nextHand;
                     placedTiles=newBoardTiles;
                     horizontalPrefixes = newPrefixes |> fst; 
@@ -366,29 +352,32 @@ module internal State =
                         
     
     let updateStatePlayed st pid ms points =
+        ////ScrabbleUtil.DebugPrint.forcePrint $"Getting direction\n" 
         let isHorizontal = isHorizontal ms st.placedTiles
+        ////ScrabbleUtil.DebugPrint.forcePrint $"Direction: %b{isHorizontal}\n" 
+        //ScrabbleUtil.DebugPrint.forcePrint $"Sorting ms\n" 
         let msSorted = sortMs ms isHorizontal
 
-
+        //ScrabbleUtil.DebugPrint.forcePrint $"Finding new board tiles\n" 
         let newBoardTiles = getCoordAndTileFromMove msSorted st.placedTiles
-        
+        //ScrabbleUtil.DebugPrint.forcePrint $"ms Sorted: %A{msSorted}\n" 
         let prefixStartCoord = msSorted.Head |> fst
         let newPrefixes = addPrefix prefixStartCoord st msSorted isHorizontal
         
         {st with 
-            playerTurn=changeTurn st; 
+            playerTurn=updatePlayerTurn st; 
             placedTiles = newBoardTiles;
             horizontalPrefixes = newPrefixes |> fst; 
             verticalPrefixes = newPrefixes |> snd}
     
     let  updateStatePlayerPassed st =
-        {st with playerTurn = changePlayerTurn st}
+        {st with playerTurn = updatePlayerTurn st}
     
     let updateStatePlayerForfeit st playerId =
        let updatedForfeitedPlayers = playerId::st.ForfeitedPlayers
-       {st with playerTurn = changePlayerTurn st; ForfeitedPlayers = updatedForfeitedPlayers}
+       {st with playerTurn = updatePlayerTurn st; ForfeitedPlayers = updatedForfeitedPlayers}
        
     let updateStatePiecesChangedSuccess st newPieces =
         let nextHand = addToHandSet newPieces MultiSet.empty
-        {st with playerTurn = changePlayerTurn st; hand= nextHand}
+        {st with playerTurn = updatePlayerTurn st; hand= nextHand}
          

@@ -3,6 +3,7 @@ open System.Collections.Generic
 open Microsoft.FSharp.Collections
 open ScrabbleUtil
 open ScrabbleUtil.Dictionary
+open StateMonad
 open madsSW2.State
 open Parser
         
@@ -10,16 +11,21 @@ type internal move = state -> (coord * (uint32 * (char * int))) list
 
 
 // We need implementation from assignment 2.17 and 3.8 i think
-let isHole (coord:coord)(board:board) =
-        let square = board.squares coord
-        DebugPrint.forcePrint $"Square (hole): %A{square}"
-        match board.squares coord with
-            |StateMonad.Success(result) -> 
-                    match result with 
-                    |None -> true
-                    |_ -> false
-            |_ -> false //hvad hvis selve boardfun fejler, saa havner vi hernede og siger der ikke et et hul
-
+let isValid (coord:coord)(board:board) =
+        let res = board.squares coord
+        match res with
+        | Success boardPos  ->
+            match boardPos with  
+            |None -> 
+                ScrabbleUtil.DebugPrint.forcePrint $"We have a hole"
+                false
+            |Some squareProg ->
+                let lookup = (squareProg.Item 0) Eval.hello 0 0
+                ScrabbleUtil.DebugPrint.forcePrint $"values: %A{lookup}"
+                true
+        | Failure _ ->
+            ScrabbleUtil.DebugPrint.forcePrint $"We have a hole"
+            false
 (* let isHole2 board coord index acc =
     board.squares coord |>
     fun(StateMonad.Success sq) -> sq |>
@@ -135,11 +141,11 @@ let findPlayableTiles (hand:MultiSet.MultiSet<uint32>) (dict:Dict) (placedTiles:
                             match step (fst elem) dict with      
                             | None -> acc //No move
                             | Some(false, dic) -> 
-                                if   (isFreeAdjacentSquares x y isHorizontal placedTiles) |> Async.RunSynchronously //&& not(isHole (coord(x,y)) board)
+                                if   (isFreeAdjacentSquares x y isHorizontal placedTiles) |> Async.RunSynchronously && isValid (coord(x,y)) board
                                 then aux (MultiSet.removeSingle letterIndex hand) dic (placement::move) acc tiles (incrementCoord isHorizontal (x, y) )
                                 else acc
                             | Some(true, _) -> 
-                                if (isFreeAdjacentSquares x y isHorizontal placedTiles) |> Async.RunSynchronously //&& not(isHole (coord(x,y)) board)
+                                if (isFreeAdjacentSquares x y isHorizontal placedTiles) |> Async.RunSynchronously && isValid (coord(x,y)) board
                                 then
                                 //DebugPrint.forcePrint $"Found Word (128): %A{placement::move}\n" 
                                 (placement::move)::acc
