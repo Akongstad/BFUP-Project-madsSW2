@@ -1,7 +1,6 @@
 ﻿namespace madsSW2
 open ScrabbleUtil
 open System.IO
-open Parser
 module Scrabble =
 
     val startGame :
@@ -14,4 +13,4 @@ module Scrabble =
         Map<uint32, tile> ->         (* Tile lookup table *)
         uint32 option ->             (* Timeout in miliseconds *)
         Stream ->                    (* Communication channel to the server *)
-        (unit -> unit)               (* Delay to allow everyone to start at the same time after setup *)
+        (unit -> 'a)             (* Delay to allow everyone to start at the same time after setup *)

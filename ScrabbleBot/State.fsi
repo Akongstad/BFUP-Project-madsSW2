@@ -13,13 +13,18 @@ module internal State =
             playerNumber  : uint32
             playerTurn    : uint32
             hand          : MultiSet.MultiSet<uint32>
-            boardTiles    : Map<coord,(char*int)>
+            placedTiles    : Map<coord,uint*(char*int)>
+            horizontalPrefixes : Map<coord,((int * int) * (uint * (char * int))) list>
+            verticalPrefixes : Map<coord,((int * int) * (uint * (char * int))) list>
+            tiles : Map<uint32, ScrabbleUtil.tile>
+            timeout: uint32 option
+            allowChange: bool
             //number of players (så vi bl.a ved at hvis en forfeiter, og de kun er 2, så har den anden vundet.
             //player turn
             //hvordan holdes der styr på point? - det gør serveren.
         }
     
-    val mkState : board -> Dict -> uint32 -> uint32 -> uint32 -> MultiSet.MultiSet<uint32> -> List<uint32> -> Map<coord,(char * int)> -> state
+    val mkState : board -> Dict -> uint32 -> uint32 -> uint32 -> MultiSet.MultiSet<uint32> -> List<uint32> -> Map<coord,uint*(char*int)> -> Map<coord,((int * int) * (uint * (char * int))) list> -> Map<coord,((int * int) * (uint * (char * int))) list> -> Map<uint32, ScrabbleUtil.tile> -> uint32 option -> bool -> state
     val board           : state -> board
     val dict            : state -> Dict
     val numberOfPlayers : state -> uint32
@@ -27,10 +32,16 @@ module internal State =
     val playerNumber    : state -> uint32
     val playerTurn      : state -> uint32
     val hand            : state -> MultiSet.MultiSet<uint32>
-    val boardTiles      : state -> Map<coord,(char*int)>
+    val placedTiles      : state -> Map<coord,uint*(char*int)>
+    val horizontalPrefixes : state -> Map<coord,((int * int) * (uint * (char * int))) list>
+    val verticalPrefixes : state -> Map<coord,((int * int) * (uint * (char * int))) list> 
+    val tiles : state -> Map<uint32, ScrabbleUtil.tile>
+    val timeout : state -> uint option
+    val allowChange : state -> bool
     
     val updateStatePlaySuccess : state -> ((int * int) * (uint32 * (char * int))) list -> 'a -> (uint32 * uint32) list -> state
-    val updateStatePlayed : state -> 'a -> ((int * int) * ('b * (char * int))) list -> 'c -> state
+    val updateStatePlayed : state -> 'a -> ((int * int) * (uint * (char * int))) list -> 'c -> state
     val updateStatePlayerPassed : state -> state
     val updateStatePlayerForfeit : state -> uint32 -> state
     val updateStatePiecesChangedSuccess : state -> (uint32 * uint32) list -> state
+    val updateStateNotEnoughPieces : state -> state

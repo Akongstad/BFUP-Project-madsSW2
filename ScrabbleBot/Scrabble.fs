@@ -7,7 +7,6 @@ open System.IO
 open State
 
 open ScrabbleUtil.DebugPrint
-open StateMonad
 // The RegEx module is only used to parse human input. It is not used for the final product.
 
 module RegEx =
@@ -19,7 +18,7 @@ module RegEx =
         else None
 
     let parseMove ts =
-        printf("parsing move\n")
+        debugPrint("parsing move\n")
         let pattern = @"([-]?[0-9]+[ ])([-]?[0-9]+[ ])([0-9]+)([A-Z]{1})([0-9]+)[ ]?" 
         Regex.Matches(ts, pattern) |>
         Seq.cast<Match> |>
@@ -32,7 +31,7 @@ module RegEx =
                 | _ -> failwith "Failed (should never happen)") |>
         Seq.toList
     let parseChangePieces ts =
-        printf("parsing move\n")
+        debugPrint("parsing move\n")
         let pattern = @"([\d]){1,2}" 
         Regex.Matches(ts, pattern) |>
         Seq.cast<Match> |>
@@ -49,102 +48,135 @@ module RegEx =
 
     let printHand pieces hand =
         hand |>
-        MultiSet.fold (fun _ x i -> forcePrint (sprintf "%d -> (%A, %d)\n" x (Map.find x pieces) i)) ()
+        MultiSet.fold (fun _ x i -> forcePrint $"%d{x} -> (%A{Map.find x pieces}, %d{i})\n") ()
+    
+    let printPrefixes (prefixes: Map<coord,((int * int) * (uint * (char * int))) list>) = 
+        prefixes |>
+        Map.fold (fun _ x i -> 
+                forcePrint(sprintf $"%A{x}")
+                List.fold (fun _ ((_,_),(_,(c,_))) -> forcePrint(sprintf $"%c{c}" )) () i
+                forcePrint $"\n"
+                ) () 
 
 module ManualPlay =
-    let handToIdList hand = hand |> MultiSet.fold (fun acc x _ -> x::acc ) []
-    let parsePlayerMove cstream st (input:string) =
+    let rec appendTiles n x acc = 
+        match n with
+        |0u -> acc
+        |_ ->
+            appendTiles (n-1u) x (x::acc)
+    let handToIdList hand = hand |> MultiSet.fold (fun acc x n -> appendTiles n x acc ) []
+    let parsePlayerAction cstream st (input:string) =
         let action = input.Substring(0, 2)
         match action with
         | "mo" ->
-            forcePrint "PLayer wants to move\n"
             let command = (input.Substring 3)
-            let move = RegEx.parseMove (command)
-            debugPrint (sprintf "Player %d -> Server:\n%A\n" (State.playerNumber st) move)
+            let move = RegEx.parseMove command
+            debugPrint $"Player %d{playerNumber st} -> Server:\n%A{move}\n"
             send cstream (SMPlay move)
         |"ch" ->
-            forcePrint "Player wants to change pieces\n"
+            debugPrint "Player wants to change pieces\n"
             let piecesToChange = handToIdList st.hand
-            debugPrint (sprintf "Player %d <- Server:\n%A\n" (State.playerNumber st) piecesToChange)
+            debugPrint $"Player %d{playerNumber st} <- Server:\n%A{piecesToChange}\n"
             send cstream (SMChange piecesToChange)
         | "ps" ->
-            forcePrint "Player wants to pass\n"
+            debugPrint "Player wants to pass\n"
             send cstream SMPass        
         | "ff" ->
-            forcePrint "Player wants to ff\n"
+            debugPrint "Player wants to ff\n"
             send cstream SMForfeit
         | _ -> failwith "Non valid command"
 
 module Scrabble =
     open System.Threading
     
-    let playGame cstream pieces (st : State.state) =
+    let playGame cstream pieces (st : state) =
 
-        let rec aux (st : State.state) =
-            Print.printHand pieces (State.hand st)
-                   
-            // remove the force print when you move on from manual input (or when you have learnt the format)
-            forcePrint "Input move (format '(<x-coordinate> <y-coordinate> <piece id><character><point-value> )*', note the absence of space between the last inputs)\n\n"
+        let rec aux (st : state) =
+            (*print hand
+            Print.printHand pieces (hand st)*) 
             
-            let input = System.Console.ReadLine()
+            (* let input = System.Console.ReadLine()
             //For playing manually:
-            ManualPlay.parsePlayerMove cstream st input
-            
-            //FOR Playing with bot
-            (*match (st.playerTurn = st.playerNumber ) with
+            let move = RegEx.parseMove (input)
+            debugPrint (sprintf "Player %d -> Server:\n%A\n" (State.playerNumber st) move)
+            send cstream (SMPlay move) *)
+
+            //for Playing with bot
+            match (st.playerTurn = st.playerNumber ) with
             | true -> 
+                use cancellationSource = new CancellationTokenSource()
                 let move = generateAction st
                 match List.length move with
-                | 0 -> send cstream SMPass
+                | 0 ->
+                    match st.allowChange with
+                    |true -> send cstream (SMChange (ManualPlay.handToIdList st.hand))
+                    //send cstream SMPass
+                    |false -> send cstream SMPass
                 | _ -> send cstream (SMPlay move )
-            | _ -> failwith "How do we wait?"*)
-
-            let msg = recv cstream
-            //debugPrint (sprintf "Player %d <- Server:\n%A\n" (State.playerNumber st) move) // keep the debug lines. They are useful.
-
+            | false -> ()
+            
+            let msg = recv cstream 
             match msg with
             | RCM (CMPlaySuccess(ms, points, newPieces)) ->
                 (* Successful play by you. Update your state (remove old tiles, add the new ones, change turn, etc) *)
-                printf("succesful play by you!\n")    
+                debugPrint("succesful play by you!\n")    
                 let st' = updateStatePlaySuccess st ms points newPieces
                 aux st'
-
+                
             | RCM (CMPlayed (pid, ms, points)) ->
                 (* Successful play by other player. Update your state *)
-                printf("succesful play by other!\n")        
+                debugPrint("succesful play by other!\n")        
                 let st' = updateStatePlayed st pid ms points
                 aux st'
                 
             | RCM (CMPlayFailed (pid, ms)) ->
                 (* Failed play. Update your state *)
-                printf("failed play by you!\n")
+                debugPrint $"failed play by %d{pid}. Attempted move: %A{ms} !\n"
                 let st' = updateStatePlayerPassed st
                 aux st'
             | RCM (CMPassed playerId) ->
-                printf($"Player %d{playerId} passed\n")
+                debugPrint($"Player %d{playerId} passed\n")
                 let st' = updateStatePlayerPassed st
                 aux st'
             | RCM (CMForfeit playerId) ->
-                printf($"Player %d{playerId} forfeited\n")
+                debugPrint($"Player %d{playerId} forfeited\n")
                 let st' = updateStatePlayerForfeit st playerId
                 aux st'
             | RCM(CMChangeSuccess(newPieces)) ->
-                printf("You changed pieces\n")
+                debugPrint("You changed pieces\n")
                 let st' = updateStatePiecesChangedSuccess st newPieces
                 aux st'
             | RCM(CMChange(playerId, numberOfTiles)) ->
-                printf($"Player %d{playerId} changed %d{numberOfTiles} pieces\n")              
+                debugPrint($"Player %d{playerId} changed %d{numberOfTiles} pieces\n")              
                 let st' = updateStatePlayerPassed st
                 aux st'
             | RCM (CMGameOver finalSCore) ->
-                printf("Game over Final score:")
+                debugPrint("Game over Final score:\n")
                 finalSCore |>
-                List.fold (fun _ (id,score) -> printf($"Player: %d{id} -- Score: %d{score}\n")) ()
-            | RCM a -> failwith (sprintf "not implmented: %A" a)
-            | RGPE err ->
-                printfn "Gameplay Error:\n%A" err
+                List.fold (fun _ (id,score) -> debugPrint $"Player: %d{id} -- Score: %d{score}\n") ()
+                exit(0)
+            | RCM (CMTimeout time) -> 
+                debugPrint($"Timeout %d{time}")
                 let st' = updateStatePlayerPassed st
-                aux st'   
+                aux st'
+            | RGPE err ->
+                debugPrint $"Gameplay Error:\n%A{err}"
+                let mutable allowChange = true
+                List.fold (fun _ error ->
+                    match  error  with
+                    | GPENotEnoughPieces _ ->
+                        allowChange <- false
+                        allowChange
+                    | _ -> allowChange 
+                    ) true err |> ignore
+                match allowChange with
+                | true ->
+                    let st' = updateStatePlayerPassed st
+                    aux st'
+                | false ->
+                    let st' = updateStateNotEnoughPieces st
+                    aux st'
+                    
         aux st
     let startGame 
             (boardP : boardProg) 
@@ -156,7 +188,7 @@ module Scrabble =
             (tiles : Map<uint32, tile>)
             (timeout : uint32 option) 
             (cstream : Stream) =
-        forcePrint 
+        debugPrint 
             $"Starting game!
                       number of players = %d{numPlayers}
                       player id = %d{playerNumber}
@@ -164,22 +196,17 @@ module Scrabble =
                       hand =  %A{hand}
                       timeout = %A{timeout}\n\n"
             
-           
+        
         //let dict = dictf true // Uncomment if using a gaddag for your dictionary
         let dict = dictf false // Uncomment if using a trie for your dictionary
         let board = Parser.mkBoard boardP
-
         let forfeitedPlayers = List.Empty
                   
         let handSet = List.fold (fun acc (x, k) -> MultiSet.add x k acc) MultiSet.empty hand
         
         let boardTiles = Map.empty
-        //TODO Save this in state. For checking whether a square is a hole and calculating points 
-        let boardProg =
-            Map.map(fun _ value -> Parser.parseSquareProg value) boardP.squares
-            |> Parser.parseBoardProg boardP.prog
         
-        fun () -> playGame cstream tiles (State.mkState board dict numPlayers playerNumber playerTurn  handSet forfeitedPlayers boardTiles)
+        fun () -> playGame cstream tiles (mkState board dict numPlayers playerNumber playerTurn  handSet forfeitedPlayers boardTiles Map.empty Map.empty tiles timeout true)
 
 
         

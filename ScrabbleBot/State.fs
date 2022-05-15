@@ -1,12 +1,7 @@
 namespace madsSW2
 open Parser
 open ScrabbleUtil
-module internal State = 
-    // Make sure to keep your state localised in this module. It makes your life a whole lot easier.
-    // Currently, it only keeps track of your hand, your player numer, your board, and your dictionary,
-    // but it could, potentially, keep track of other useful
-    // information, such as number of players, player turn, etc.
-
+module internal State =  
     type state = {
         board         : board
         dict          : Dictionary.Dict
@@ -15,13 +10,27 @@ module internal State =
         playerNumber  : uint32
         playerTurn    : uint32
         hand          : MultiSet.MultiSet<uint32>
-        boardTiles    : Map<coord,(char*int)>
-        //number of players (så vi bl.a ved at hvis en forfeiter, og de kun er 2, så har den anden vundet.
-        //player turn
-        //hvordan holdes der styr på point? - det gør serveren.
+        placedTiles    : Map<coord,uint*(char*int)>
+        horizontalPrefixes : Map<coord,((int * int) * (uint * (char * int))) list>
+        verticalPrefixes : Map<coord,((int * int) * (uint * (char * int))) list>
+        tiles : Map<uint32, tile>
+        timeout: uint32 option
+        allowChange: bool
     }
 
-    let mkState b d np pn pt h g bT = {board = b; dict = d; numberOfPlayers = np; playerNumber = pn; ForfeitedPlayers =g; playerTurn = pt; hand = h; boardTiles = bT}
+    let mkState b d np pn pt h g bT hp vp tl tm ac= 
+        {board = b; 
+        dict = d; 
+        numberOfPlayers = np; 
+        playerNumber = pn; 
+        ForfeitedPlayers =g; 
+        playerTurn = pt; hand = h; 
+        placedTiles = bT;
+        horizontalPrefixes = hp;
+        verticalPrefixes = vp;
+        tiles  = tl;
+        timeout = tm;
+        allowChange = ac}
     let board st         = st.board
     let dict st          = st.dict
     let playerNumber st  = st.playerNumber
@@ -29,30 +38,205 @@ module internal State =
     let playerTurn st = st.playerTurn
     let numberOfPlayers st = st.numberOfPlayers
     let ForfeitedPlayers st = st.ForfeitedPlayers
-    let boardTiles st = st.boardTiles
-    
-    // move: ((int * int) * (uint32 * (char * int))) list
-    //helper methods
-     
-        
-    let getCoordAndTileFromMove moveList boardTiles = List.fold (fun acc (x,k) -> Map.add (coord(x)) (snd(k)) acc) boardTiles moveList //get list of coord and (char * char point val)
-    let getUsedTileIdFromMove moveList = List.fold (fun acc (x,k) -> fst(k)::acc) List.Empty moveList //get the tile ids of the played move
-    
-    let removeFromHandSet playedPieces hand = List.fold (fun acc x -> MultiSet.remove x 1u acc) hand playedPieces //removes the played tiles from the hand
-    
-    let addToHandSet newTiles hand = List.fold (fun acc (x, k) -> MultiSet.add x k acc) hand newTiles //adds new tiles to the hand
-    
-    let changePlayerTurn (st:state) =
-                let rec player pnr =
-                    if st.numberOfPlayers = pnr then
-                        if List.contains 1u st.ForfeitedPlayers then
-                            player 1u
-                        else 1u
-                    else if (List.contains (pnr+1u ) st.ForfeitedPlayers) then
+    let placedTiles st = st.placedTiles
+    let horizontalPrefixes st = st.horizontalPrefixes
+    let verticalPrefixes st = st.horizontalPrefixes
+    let tiles st = st.tiles
+    let timeout st = st.timeout
+    let allowChange st = st.allowChange
+    type extendDirection =
+        |Vertical
+        |Horizontal
+        |Both
+        |Neither
 
-                            player st.playerTurn +  1u
-                         else st.playerTurn +  1u
-                player st.playerNumber
+    let getDirection (c:coord) placedTiles =
+        
+        let extendsHorizontal = Map.containsKey (fst(c)-1,snd(c)) placedTiles
+        let prependsHorizontal = Map.containsKey (fst(c)+1,snd(c)) placedTiles
+        
+        let extendsVertical =  Map.containsKey (fst(c),snd(c)-1) placedTiles
+        let prependsVertical = Map.containsKey (fst(c),snd(c)+1) placedTiles
+        
+        match extendsHorizontal || prependsHorizontal, extendsVertical || prependsVertical with
+        |true, true -> Neither
+        |false, false -> Both
+        |true, false -> Horizontal
+        |false, true  -> Vertical
+
+    let sortMs (ms:((int * int) * (uint * (char * int))) list) isHorizontal  =
+        match isHorizontal with
+        |true -> List.sortBy (fun ((x,_),(_,(_,_))) -> x ) ms
+        |false -> List.sortBy (fun ((_,y),(_,(_,_))) -> y ) ms
+    let isHorizontal (ms:((int * int) * (uint * (char * int))) list) placedTiles =
+        if ms.Length = 1 then
+            let direction = getDirection (coord(fst(List.head ms))) placedTiles
+            match direction with
+            |Neither ->
+                    //"Extends both so direction does not matter"
+                    true
+            |Vertical -> false
+            |Horizontal -> true 
+            | _ -> failwith "impossible"
+        else
+            let firstX = (List.head ms |> fst |> fst)
+            let lastX =  (List.last ms |> fst |> fst)
+            not(firstX = lastX)
+
+    let getCoordAndTileFromMove moveList (placedTiles: Map<coord,uint*(char*int)>) = 
+        List.fold (fun acc (x,k) -> Map.add (coord(x)) k acc) placedTiles moveList //get list of coord and (char * char point val)
+        
+    let getNewSearchCoord (x,y) isHorizontal isSuffix = 
+            match isHorizontal with
+            | false -> 
+                match isSuffix with 
+                |false -> (x,y-1)
+                |true -> (x,y+1) 
+            | true -> 
+                match isSuffix with 
+                |false -> (x-1,y)
+                |true -> (x+1,y) 
+    
+    let getFixFromMove placedTiles prefixes (ms:((int * int) * (uint * (char * int))) list) isHorizontal isSuffix newPrefixes= 
+        let x,y = Coord.getX(ms.Head |> fst), Coord.getY(ms.Head |> fst)
+        
+        let rec aux placedTiles prefixes coords isHorizontal =
+            let newCoord = getNewSearchCoord coords isHorizontal isSuffix
+            match Map.containsKey (coord(newCoord)) placedTiles with
+            | false -> newPrefixes
+            | true when Map.containsKey (coord(newCoord)) prefixes ->
+                let prefix = Map.find (coord(newCoord)) prefixes
+                Map.add (coord(newCoord)) prefix newPrefixes
+            | true -> aux placedTiles prefixes newCoord isHorizontal
+        aux placedTiles prefixes (x,y) isHorizontal 
+
+    let rec getMidfixesFromMove prefixes (ms:((int * int) * (uint * (char * int))) list) isHorizontal acc = 
+        let headCoord = coord(fst ms.Head)
+        let tailCoord = coord(fst ms.Tail.Head)
+        let diff = 
+            match isHorizontal with
+            | false -> 
+                (Coord.getY headCoord - Coord.getY tailCoord)
+            | true -> 
+                (Coord.getX headCoord - Coord.getX tailCoord)   
+
+        match  ms with
+        | [] -> acc //will never happen
+        | _ when List.length ms = 2 && not(System.Math.Abs diff = 1) -> 
+            let oldPrefixCoords = 
+                match isHorizontal with
+                | false -> 
+                    coord(Coord.getX headCoord, Coord.getY headCoord + 1)
+                | true -> 
+                    coord(Coord.getX headCoord + 1, Coord.getY headCoord)            
+            let prefix = Map.find oldPrefixCoords prefixes
+            
+            Map.add oldPrefixCoords prefix acc
+        | _ when List.length ms = 2 -> acc
+        | _::t when not(System.Math.Abs diff = 1) -> 
+            let oldPrefixCoords = 
+                match isHorizontal with
+                | false -> 
+                    coord(Coord.getX headCoord, Coord.getY headCoord + 1)
+                | true -> 
+                    coord(Coord.getX headCoord + 1, Coord.getY headCoord)
+            
+            let prefix = Map.find oldPrefixCoords prefixes            
+            let newAcc = Map.add oldPrefixCoords prefix acc
+            getMidfixesFromMove prefixes t isHorizontal newAcc
+        | _::t -> getMidfixesFromMove prefixes t isHorizontal acc
+        
+    let getFixesFromMove (prefixes:Map<coord,((int * int) * (uint * (char * int))) list>) (placedTiles: Map<coord,uint*(char*int)>) (ms:((int * int) * (uint * (char * int))) list) isHorizontal  = 
+        let midFixes =
+            match List.length ms with
+            | 1 -> Map.empty
+            | _ -> getMidfixesFromMove prefixes ms isHorizontal Map.empty
+
+        let midAndPrefixes = getFixFromMove (getCoordAndTileFromMove ms placedTiles) prefixes ms isHorizontal false midFixes
+        let allFixes = getFixFromMove (getCoordAndTileFromMove ms placedTiles) prefixes ms isHorizontal true midAndPrefixes
+        allFixes
+    
+    let addOpposite prefixes placedTiles (ms:((int * int) * (uint * (char * int))) list) isHorizontal = 
+        List.fold (fun acc msItem -> 
+            let newFixes = getFixesFromMove acc placedTiles [msItem] isHorizontal
+            let oppositePrefixesCleaned = 
+                Map.fold (fun acc coords _ -> 
+                Map.remove coords acc ) acc newFixes
+            let word = 
+                Map.fold (fun acc _ elem -> 
+                elem @ acc
+                ) [msItem] newFixes
+            let wordSorted = sortMs word isHorizontal
+            let startCoord = wordSorted.Head |> fst
+            Map.add startCoord wordSorted oppositePrefixesCleaned
+            ) prefixes ms
+
+    let addHorizontalPrefix (x,y) (st:state) (ms:((int * int) * (uint * (char * int))) list)  = 
+        match Map.isEmpty st.placedTiles with
+        | true -> 
+             //Only first move
+            //This move is a new prefix. //Only first move
+            let newHorizontal = Map.add (x,y) ms st.horizontalPrefixes
+            let newVertical = addOpposite st.verticalPrefixes st.placedTiles ms false
+            newHorizontal,newVertical
+        | false ->
+            let newFixes = getFixesFromMove st.horizontalPrefixes st.placedTiles ms true
+            let horizontalPrefixesCleaned = 
+                Map.fold (fun acc coords _ -> 
+                Map.remove coords acc ) st.horizontalPrefixes newFixes
+            //This move is an extension of a prefix
+            let word = 
+                Map.fold (fun acc _ elem -> 
+                elem @ acc
+                ) ms newFixes
+            let wordSorted = sortMs word true
+            let startCoord = wordSorted.Head |> fst
+
+            let newHorizontal = Map.add startCoord wordSorted horizontalPrefixesCleaned
+            let newVertical = addOpposite st.verticalPrefixes st.placedTiles ms false
+            newHorizontal, newVertical
+    
+    let addVerticalPrefix (x,y) (st:state) (ms:((int * int) * (uint * (char * int))) list)  = 
+        match Map.isEmpty st.placedTiles with
+        | true ->
+            //This move is a new prefix        
+            let newVertical = Map.add (x,y) ms st.verticalPrefixes
+            let newHorizontal = addOpposite  st.horizontalPrefixes st.placedTiles ms true
+            newHorizontal, newVertical
+        | false ->
+            let newFixes = getFixesFromMove st.verticalPrefixes st.placedTiles ms false
+            
+            let VerticalPrefixesCleaned = 
+                Map.fold (fun acc coords _ -> 
+                Map.remove coords acc ) st.verticalPrefixes newFixes
+            //This move is an extension of a prefix
+            let word = 
+                Map.fold (fun acc _ elem -> 
+                elem @ acc
+                ) ms newFixes
+            let wordSorted = sortMs word false
+            let startCoord = wordSorted.Head |> fst
+
+            let newVertical = Map.add startCoord wordSorted VerticalPrefixesCleaned
+            let newHorizontal = addOpposite st.horizontalPrefixes st.placedTiles ms true 
+            newHorizontal, newVertical
+
+    let addPrefix (startCoord:coord) (st:state) (ms:((int * int) * (uint * (char * int))) list) isHorizontal = 
+        match isHorizontal with
+        |true -> 
+            addHorizontalPrefix (Coord.getX startCoord, Coord.getY startCoord) st ms
+        |false ->
+            addVerticalPrefix (Coord.getX startCoord, Coord.getY startCoord) st ms
+        
+    let getUsedTileIdFromMove moveList = 
+        List.fold (fun acc (_,k) -> fst(k)::acc) List.Empty moveList //get the tile ids of the played move
+    
+    let removeFromHandSet playedPieces hand = 
+        List.fold (fun acc x -> MultiSet.remove x 1u acc) hand playedPieces //removes the played tiles from the hand
+    
+    let addToHandSet newTiles hand = 
+        List.fold (fun acc (x, k) -> MultiSet.add x k acc) hand newTiles //adds new tiles to the hand
+    
     let updatedForfeitedPlayers (st : state) playerId = playerId::st.ForfeitedPlayers
         
     let updatePlayerTurn st =
@@ -62,58 +246,49 @@ module internal State =
             | true -> aux next
             | _ -> next
         aux st.playerTurn
-    let changeTurn (st:state) = (st.playerTurn % st.numberOfPlayers) + 1u
-    let updateStatePlaySuccess st ms points newPieces =
-                let usedTileIds = getUsedTileIdFromMove ms
+    let updateStatePlaySuccess st ms _ newPieces =
+                let isHorizontal = isHorizontal ms st.placedTiles
+                let msSorted = sortMs ms isHorizontal
+                let usedTileIds = getUsedTileIdFromMove msSorted
                 let currentHand = removeFromHandSet usedTileIds st.hand  
-                let nextHand = addToHandSet newPieces currentHand
-                
-                let newBoardTiles = getCoordAndTileFromMove ms st.boardTiles
-                mkState st.board st.dict st.numberOfPlayers st.playerNumber (changePlayerTurn st) nextHand st.ForfeitedPlayers newBoardTiles
+                let nextHand = addToHandSet newPieces currentHand      
+                let newBoardTiles = getCoordAndTileFromMove msSorted st.placedTiles
+                let prefixStartCoord = msSorted.Head |> fst
+                let newPrefixes = addPrefix prefixStartCoord st msSorted isHorizontal
+
+                {st with 
+                    playerTurn = updatePlayerTurn st; 
+                    hand= nextHand;
+                    placedTiles=newBoardTiles;
+                    horizontalPrefixes = newPrefixes |> fst; 
+                    verticalPrefixes = newPrefixes |> snd}
+            
+                        
     
-    let updateStatePlayed st pid ms points =
-        let newBoardTiles = getCoordAndTileFromMove ms st.boardTiles
-        mkState st.board st.dict st.numberOfPlayers st.playerNumber (changePlayerTurn st) st.hand st.ForfeitedPlayers newBoardTiles
+    let updateStatePlayed st _ ms _ =
+        let isHorizontal = isHorizontal ms st.placedTiles
+        let msSorted = sortMs ms isHorizontal
+        let newBoardTiles = getCoordAndTileFromMove msSorted st.placedTiles
+        let prefixStartCoord = msSorted.Head |> fst
+        let newPrefixes = addPrefix prefixStartCoord st msSorted isHorizontal
+        
+        {st with 
+            playerTurn=updatePlayerTurn st; 
+            placedTiles = newBoardTiles;
+            horizontalPrefixes = newPrefixes |> fst; 
+            verticalPrefixes = newPrefixes |> snd}
     
     let  updateStatePlayerPassed st =
-        {st with playerTurn = changePlayerTurn st}
+        {st with playerTurn = updatePlayerTurn st}
+    
+    let  updateStateNotEnoughPieces st =
+        {st with playerTurn = updatePlayerTurn st; allowChange = false}
     
     let updateStatePlayerForfeit st playerId =
        let updatedForfeitedPlayers = playerId::st.ForfeitedPlayers
-       {st with playerTurn = changePlayerTurn st; ForfeitedPlayers = updatedForfeitedPlayers}
+       {st with playerTurn = updatePlayerTurn st; ForfeitedPlayers = updatedForfeitedPlayers}
        
     let updateStatePiecesChangedSuccess st newPieces =
         let nextHand = addToHandSet newPieces MultiSet.empty
-        {st with playerTurn = changePlayerTurn st; hand= nextHand}
+        {st with playerTurn = updatePlayerTurn st; hand= nextHand}
          
-        
-             
-    // '(<x-coordinate> <y-coordinate> <piece id><character><point-value> )
-    (*HEURISTIC*)
-    (*let bestMove (st : state) =
-        let board = st.board
-        let hand = st.hand
-        let dict = st.dict
-        let boardTiles = st.boardTiles
-        
-        
-        let coords = List.ofSeq boardTiles.Keys
-        
-        let auxCheckedCoords = List.empty
-        
-        
-        let rec aux (c:coord) (v:(char*int)) =
-            if List.contains c auxCheckedCoords
-            then coords = coords.Tail
-            else
-            
-            let dirClear = getDirectionClear c st
-            match dirClear with
-                |Neither ->
-                    c::auxCheckedCoords
-                    coords = coords.tail
-                    aux coords.Head boardTiles[coords.Head]
-                |Both -> dunno
-                |Top ->
-                    let bka = step 'c' dict
-                    *)
