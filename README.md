@@ -20,7 +20,7 @@ cd to root folder
 ```bash
 dotnet run --project ScrabbleTemplate
 ```
-2. From scrabble Template
+2. From ScrabbleTemplate project
 
 cd to root folder
 ```bash
