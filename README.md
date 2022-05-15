@@ -7,18 +7,18 @@ https://dotnet.microsoft.com/en-us/download
 
 
 ## Usage
-clone project
-
-Cd to root folder
+1.
+cd to root folder
 
 ```bash
 dotnet run --project ScrabbleTemplate
 ```
-
-## Contributing
-Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
-
-Please make sure to update tests as appropriate.
+2.
+cd to root/ScrabbleTemplate
+```bash
+dotnet run
+```
+3. Use JetBrains Rider deafult run configuration
 
 ## License
 [MIT](https://choosealicense.com/licenses/mit/)
