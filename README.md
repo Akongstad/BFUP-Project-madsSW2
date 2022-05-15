@@ -3,17 +3,16 @@
 
 
 ## Installation
+https://dotnet.microsoft.com/en-us/download
 
-
-
-```bash
-
-```
 
 ## Usage
+clone project
+
+Cd to root folder
 
 ```bash
-
+dotnet run --project ScrabbleTemplate
 ```
 
 ## Contributing
