@@ -116,6 +116,7 @@ module Scrabble =
             //FOR Playing with bot
             match (st.playerTurn = st.playerNumber ) with
             | true -> 
+                use cancellationSource = new CancellationTokenSource()
                 let move = generateAction st
                 match List.length move with
                 | 0 -> send cstream (SMChange (ManualPlay.handToIdList st.hand))

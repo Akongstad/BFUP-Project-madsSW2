@@ -201,7 +201,7 @@ module internal Parser
         
 
     let mkBoard (bp : boardProg) :board =
-        let m' = Map.map (fun _ sP-> parseSquareProg sP) bp.squares
+        let m' = Map.map (fun _ -> parseSquareProg) bp.squares
         {
         center = bp.center;
         defaultSquare = Map.find bp.usedSquare m';
@@ -209,10 +209,5 @@ module internal Parser
         }
 
 
-(* 
-    let m' = Map.map (fun _ -> parseSquareProg) bp.squares
-        {
-        center = bp.center;
-        defaultSquare = Map.find bp.usedSquare m';
-        squares = parseBoardProg bp.prog m';
-    } *)
+ 
+        

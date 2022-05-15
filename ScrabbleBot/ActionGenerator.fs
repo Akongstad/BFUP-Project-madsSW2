@@ -7,6 +7,7 @@ open StateMonad
 open madsSW2.State
 open Parser
 open FParsecLight.TextParser
+open System.Threading
         
 type internal move = state -> (coord * (uint32 * (char * int))) list
 
@@ -154,73 +155,91 @@ let findPlayableTiles (hand:MultiSet.MultiSet<uint32>) (dict:Dict) (placedTiles:
         ) moveList hand 
     aux hand dict [] [] tiles startCoord
         
-        
-    
-    
 
-
-let rec findMove hand dict placedTiles tiles (prefixList:List<coord * list<(int * int) * (uint * (char * int))>>) isHorizontal moveList (board:board) =
+let rec findMove hand dict placedTiles tiles (prefixList:List<coord * list<(int * int) * (uint * (char * int))>>) isHorizontal moveList (board:board) token =
     async{
-        match prefixList with
-        | [] -> return moveList
-        | prefix::t -> 
-            let move = findPlayableTiles hand (prefixDict dict prefix) placedTiles tiles isHorizontal (getStartCoord prefix isHorizontal) board
-            match move with 
-            | [] ->    
-                return! findMove hand dict placedTiles tiles t isHorizontal moveList board
-            | _ -> 
-                //DebugPrint.forcePrint $"Valid move found:  %A{move}\n"
-                return! findMove hand dict placedTiles tiles t isHorizontal (moveList@move) board
+        try
+            match prefixList with
+            | [] -> return moveList
+            | prefix::t -> 
+                let move = findPlayableTiles hand (prefixDict dict prefix) placedTiles tiles isHorizontal (getStartCoord prefix isHorizontal) board
+                match move with 
+                | [] ->    
+                    return! findMove hand dict placedTiles tiles t isHorizontal moveList board token
+                | _ -> 
+                    //DebugPrint.forcePrint $"Valid move found:  %A{move}\n"
+                    return! findMove hand dict placedTiles tiles t isHorizontal (moveList@move) board token
+                
+        with| :? System.OperationCanceledException -> return moveList
         }
 
 let bestMove moveList = List.fold (fun acc elem -> if List.length elem > List.length acc then elem else acc) [] moveList
 
-let generateAction (st:state) = 
-    
-    if Map.isEmpty st.placedTiles
-    then //place first move center on empty board.
-        let centerMoveList = findPlayableTiles st.hand st.dict Map.empty st.tiles true (0,0) st.board
-        let centerMove = bestMove centerMoveList
-        match centerMove.Length with
-        |0 -> [] //pass
-        |_ ->  List.rev centerMove //play move
-    else //find move
-        let verticalPrefixList = Map.toList st.verticalPrefixes
-        let horizontalPrefixList = Map.toList st.horizontalPrefixes
-        
-        DebugPrint.forcePrint $"Chunking vert\n"
-        let maxChunkSize = 5
-        let chunksVert = 
-            match List.length verticalPrefixList >= maxChunkSize with
-            | false -> [verticalPrefixList]
-            | true -> List.chunkBySize (verticalPrefixList.Length/maxChunkSize) verticalPrefixList  
-        
-        DebugPrint.forcePrint $"Chunking hori\n"
-        let chunksHori = 
-            match List.length horizontalPrefixList >= maxChunkSize with
-            | false -> [horizontalPrefixList]
-            | true -> List.chunkBySize (horizontalPrefixList.Length/maxChunkSize) horizontalPrefixList
-        
-        DebugPrint.forcePrint $"Done Chunking\n"
-         
-        let moveList = 
-            List.fold (fun acc chunk -> 
-                (findMove st.hand st.dict st.placedTiles st.tiles chunk true [] st.board)::acc
+let collectMoveList st chunksVert chunksHori token= 
+    async{
+        let moveList =
+            (List.fold (fun acc chunk -> 
+                (findMove st.hand st.dict st.placedTiles st.tiles chunk true [] st.board token)::acc
             ) (List.fold (fun acc chunk -> 
-                (findMove st.hand st.dict st.placedTiles st.tiles chunk false [] st.board)::acc
+                (findMove st.hand st.dict st.placedTiles st.tiles chunk false [] st.board token)::acc
             ) [] chunksVert) chunksHori
                 |> Async.Parallel
-                |> Async.RunSynchronously 
+                |> Async.RunSynchronously)
+        return Array.fold (fun acc x -> x@acc) [] moveList
+}
 
 
 
-        //DebugPrint.forcePrint $"Async moveList: %A{moveList}\n"
-    
+let generateAction (st:state) = 
+        if Map.isEmpty st.placedTiles
+        then //place first move center on empty board.
+            let centerMoveList = findPlayableTiles st.hand st.dict Map.empty st.tiles true (0,0) st.board
+            let centerMove = bestMove centerMoveList
+            match centerMove.Length with
+            |0 ->  [] //pass
+            |_ ->  List.rev centerMove //play move
+        else //find move
+            let verticalPrefixList = Map.toList st.verticalPrefixes
+            let horizontalPrefixList = Map.toList st.horizontalPrefixes
+            
+            DebugPrint.forcePrint $"Chunking vert\n"
+            let maxChunkSize = 5
+            let chunksVert = 
+                match List.length verticalPrefixList >= maxChunkSize with
+                | false -> [verticalPrefixList]
+                | true -> List.chunkBySize (verticalPrefixList.Length/maxChunkSize) verticalPrefixList  
+            
+            DebugPrint.forcePrint $"Chunking hori\n"
+            let chunksHori = 
+                match List.length horizontalPrefixList >= maxChunkSize with
+                | false -> [horizontalPrefixList]
+                | true -> List.chunkBySize (horizontalPrefixList.Length/maxChunkSize) horizontalPrefixList
+            
+            DebugPrint.forcePrint $"Done Chunking\n"
 
-        let collectedMoveList = Array.fold (fun acc x -> x@acc) [] moveList
-        let bestMove = bestMove collectedMoveList
-        //DebugPrint.forcePrint $"Async bestMove (not reversed): %A{bestMove}\n"
-        List.rev bestMove
+            use cancelationToken = new CancellationTokenSource(1000)
+            let token = cancelationToken.Token
+            let mutable collectedMoveList = []
+
+            //collectedMoveList <- (Async.StartAsTask((collectMoveList st chunksVert chunksHori token), Tasks.TaskCreationOptions.None, token) |> Async.AwaitTask |> Async.RunSynchronously)
+            //let bestMove = bestMove (collectedMoveList)
+            //DebugPrint.forcePrint $"Async bestMove (not reversed): %A{bestMove}\n"
+            //List.rev bestMove
+            try
+                collectedMoveList <- (Async.StartAsTask((collectMoveList st chunksVert chunksHori token), Tasks.TaskCreationOptions.None, token) |> Async.AwaitTask |> Async.RunSynchronously)
+                let bestMove = bestMove (collectedMoveList)
+            //DebugPrint.forcePrint $"Async bestMove (not reversed): %A{bestMove}\n"
+                List.rev bestMove
+            with
+            | :? System.OperationCanceledException -> 
+                let bestMove = bestMove (collectedMoveList)
+                DebugPrint.forcePrint $"Timeout reached, best move: %A{bestMove}\n"
+                List.rev bestMove
+            
+            //DebugPrint.forcePrint $"Async moveList: %A{moveList}\n"
+        
+        
+            
         
 
 
