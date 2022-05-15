@@ -43,24 +43,21 @@ let main argv =
     let seed       = None
     let port       = 13001
 
-    let dictAPI =
-        // Uncomment if you have implemented a dictionary. last element None if you have not implemented a GADDAG
-        Some (Dictionary.empty, Dictionary.insert, Dictionary.step, None (*Some Dictionary.reverse*)) 
-        
+    let dictAPI = 
+        Some (Dictionary.empty, Dictionary.insert, Dictionary.step, None) 
 
-    
-    // Uncomment this  ine to call your client
-    
     let dictionary, time =
         time (fun () -> ScrabbleUtil.Dictionary.mkDict words dictAPI)
-        
+     
+     //Uncomment to play against self
+    //let players  =  spawnMultiples "mads" dictionary madsSW2.Scrabble.startGame 4
+     
+    //Uncomment to play against Oxyphenbutazone
     let madsdrengen  =  spawnMultiples "mads" dictionary madsSW2.Scrabble.startGame 1
     let oxydrengen = spawnMultiples "Oxy" dictionary  Oxyphenbutazone.Scrabble.startGame 1
-
-    //let players  =  spawnMultiples "mads" dictionary madsSW2.Scrabble.startGame 4
-    let players = madsdrengen @ oxydrengen   
-    // [("mads", madsSW2.Scrabble.startGame)]
-    //let players = [("mads",dictionary ,madsSW2.Scrabble.startGame), ("oxyfjæs", dictionary, Oxyphenbutazone.Scrabble.startGame)]
+    let players = madsdrengen @ oxydrengen
+    
+    //Uncommment to watch OxyphenButazone
     //let players = spawnMultiples "OxyphenButazone" dictionary Oxyphenbutazone.Scrabble.startGame 4
 
     //Test dictionary implementation. isEmpty == true means passed
