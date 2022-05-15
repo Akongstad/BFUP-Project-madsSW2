@@ -13,4 +13,4 @@ module Scrabble =
         Map<uint32, tile> ->         (* Tile lookup table *)
         uint32 option ->             (* Timeout in miliseconds *)
         Stream ->                    (* Communication channel to the server *)
-        (unit -> 'a)             (* Delay to allow everyone to start at the same time after setup *)
+        (unit -> unit)          (* Delay to allow everyone to start at the same time after setup *)
