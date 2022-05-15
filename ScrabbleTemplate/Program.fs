@@ -33,8 +33,9 @@ let main argv =
     //let board      = ScrabbleUtil.InfiniteRandomBoard.infiniteRandomBoardSeed (Some 42)
     //let board      = ScrabbleUtil.HoleBoard.holeBoard ()
     //let board      = ScrabbleUtil.InfiniteHoleBoard.infiniteHoleBoard ()
-
-    let words     = readLines "./Dictionaries/English.txt"
+    
+    let words     = readLines (AppContext.BaseDirectory + "../../../Dictionaries/English.txt")
+    
 
     let handSize   = 7u
     let timeout    = Some(2000u)

@@ -1,6 +1,4 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-
-
   <PropertyGroup>
     <RepositoryUrl>https://github.com/jesper-bengtson/Scrabble-FP2022/</RepositoryUrl>
     <TargetFramework>net6.0</TargetFramework>
