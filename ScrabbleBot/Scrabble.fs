@@ -154,7 +154,6 @@ module Scrabble =
                 debugPrint("Game over Final score:\n")
                 finalSCore |>
                 List.fold (fun _ (id,score) -> debugPrint $"Player: %d{id} -- Score: %d{score}\n") ()
-                exit(0)
             | RCM (CMTimeout time) -> 
                 debugPrint($"Timeout %d{time}")
                 let st' = updateStatePlayerPassed st
