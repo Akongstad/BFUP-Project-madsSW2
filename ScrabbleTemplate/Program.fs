@@ -25,21 +25,19 @@ let main argv =
     Console.Clear()
 
 
-//    let board        = ScrabbleUtil.StandardBoard.standardBoard ()
+    //let board        = ScrabbleUtil.StandardBoard.standardBoard ()
     let board      = ScrabbleUtil.InfiniteBoard.infiniteBoard ()
-
-//    let board      = ScrabbleUtil.RandomBoard.randomBoard ()
-//    let board      = ScrabbleUtil.RandomBoard.randomBoardSeed (Some 42)
+    //let board      = ScrabbleUtil.RandomBoard.randomBoard ()
+    //let board      = ScrabbleUtil.RandomBoard.randomBoardSeed (Some 42)
     //let board      = ScrabbleUtil.InfiniteRandomBoard.infiniteRandomBoard ()
-//    let board      = ScrabbleUtil.InfiniteRandomBoard.infiniteRandomBoardSeed (Some 42)
-
-//let board      = ScrabbleUtil.HoleBoard.holeBoard ()
+    //let board      = ScrabbleUtil.InfiniteRandomBoard.infiniteRandomBoardSeed (Some 42)
+    //let board      = ScrabbleUtil.HoleBoard.holeBoard ()
     //let board      = ScrabbleUtil.InfiniteHoleBoard.infiniteHoleBoard ()
 
     let words     = readLines "./Dictionaries/English.txt"
 
     let handSize   = 7u
-    let timeout    = Some(15000u)
+    let timeout    = Some(2000u)
     let tiles      = ScrabbleUtil.English.tiles 1u
     let seed       = None
     let port       = 13001
@@ -60,7 +58,7 @@ let main argv =
 
     //let players  =  spawnMultiples "mads" dictionary madsSW2.Scrabble.startGame 4
     let players = madsdrengen @ oxydrengen   
-      // [("mads", madsSW2.Scrabble.startGame)]
+    // [("mads", madsSW2.Scrabble.startGame)]
     //let players = [("mads",dictionary ,madsSW2.Scrabble.startGame), ("oxyfjæs", dictionary, Oxyphenbutazone.Scrabble.startGame)]
     //let players = spawnMultiples "OxyphenButazone" dictionary Oxyphenbutazone.Scrabble.startGame 4
 
